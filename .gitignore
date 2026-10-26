@@ -1,0 +1,80 @@
+# ==========================================
+# Ambientes Virtuais (Virtual Environments)
+# ==========================================
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# ==========================================
+# Caches Python & Bytecode
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ==========================================
+# Segredos e Variáveis de Ambiente
+# ==========================================
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# ==========================================
+# Bancos de Dados Locais (SQLite)
+# ==========================================
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+scout.db
+scout_backup_pre_refactor.db
+
+# ==========================================
+# Dumps de Coleta, Dados Brutos & Checkpoints
+# ==========================================
+data/
+scrapers/**/data/
+scrapers/**/*.csv
+scrapers/**/*.json
+downloaded_files/
+*.csv
+*.xlsx
+*.parquet
+*.jsonl
+*checkpoint*
+
+# ==========================================
+# Webdrivers, Navegadores & Locks
+# ==========================================
+*.lock
+drivers/
+chrome_data/
+assets/
+logs/
+*.log
+
+# ==========================================
+# IDEs & Sistema Operacional
+# ==========================================
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ==========================================
+# AI Agents & Scratch Scripts
+# ==========================================
+scratch/
+.gemini/
