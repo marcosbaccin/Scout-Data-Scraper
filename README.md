@@ -140,6 +140,28 @@ CREATE TABLE player_mapping (
 );
 ```
 
+### 🧠 Padronização Posicional de Scouting (`core/scouting_roles.py`)
+Para comparações estatísticas justas, as nomenclaturas de posições das 4 fontes são padronizadas em **7 Funções Táticas Principais** e **4 Macro-Categorias**:
+
+| Função Tática (`scout_role`) | Macro-Categoria (`scout_category`) | Descrição e Exemplos Mapeados |
+| :--- | :--- | :--- |
+| **GK** | `GK` | Goleiro (*Goalkeeper, Guarda-redes*) |
+| **CB** | `DEF` | Zagueiro Central (*Centre-Back, Líbero, D(C)*) |
+| **FB** | `DEF` | Lateral / Ala Direito ou Esquerdo (*Full-Back, Wing-Back, LB, RB, D(D), D(E)*) |
+| **DM** | `MID` | Volante / Meio-Campo Defensivo (*Defensive Midfielder, DM*) |
+| **CM_AM** | `MID` | Meia Central / Ofensivo / Armador (*Central/Attacking Midfield, CM, AM, M(C)*) |
+| **WNG** | `ATT` | Ponta / Extremo / Atacante de Lado (*Winger, M(D), M(E), A(D), A(E)*) |
+| **ST** | `ATT` | Centroavante / Homem de Área (*Striker, Centre-Forward, PL, A(C)*) |
+
+### 🏆 Camada Gold e Motor Analítico (`v_player_gold_analytics`)
+A View analítica consolida:
+1. **Perfil Unificado** (`v_player_profiles`): Dossiê cadastral, valor de mercado em euros (Transfermarkt), URLs de perfis e características qualitativas (WhoScored).
+2. **Métricas Primárias (SofaScore)**: Minutos jogados, Gols, Assistências, xG, xA, Finalizações, Passes Chave, Dribles Certos %, Duelos Ganhos %, Desarmes, Interceptações e Rating.
+3. **Métricas Exclusivas (FBref)**: Pontos por Partida (PPM), Saldo de Gols On-Pitch, Jogos Completos e Substituições.
+4. **Métricas Exclusivas (WhoScored)**: Homem do Jogo (MOTM), Nota WhoScored, Bolas Enfiadas por Jogo, Perda de Posse por Jogo e Domínios Errados por Jogo.
+5. **Cálculo P90 e Percentis por Posição**: Percentis calculados comparando apenas atletas que compartilham o mesmo `scout_role` com filtro de minutos mínimos (ex: $\ge 450$ min).
+6. **Similaridade de Atletas**: Motor vetorial de distância Euclidiana/Cosseno no espaço de percentis para encontrar os jogadores mais similares na base.
+
 ### Algoritmo Determinístico de Matching (`match_ids.py`)
 1. **Passo 1 (Exato)**: Normalização semântica (remoção de acentos e casing) + Data de nascimento exata (`birth_date`).
 2. **Passo 2 (Ano & Posição)**: Nome normalizado idêntico + Ano de nascimento idêntico + compatibilidade posicional.
@@ -258,9 +280,10 @@ Acesse a documentação interativa Swagger em: `http://localhost:8000/docs`.
   - [x] CLI centralizada (`main.py`) com comandos de telemetria (`status`), higienização (`reset`), scraping modular, carga ETL e matching.
   - [x] Módulo dedicado de higienização de dados (`core/reset.py`) para recomeço do zero limpo e seguro.
   - [x] Isolamento de subprocessos com benchmarks de duração e tolerância a falhas.
-- [ ] **Fase 3: Camada de Modelagem Gold & Percentis**
-  - [ ] Views analíticas avançadas para cruzamento completo das 4 fontes.
-  - [ ] Engine de percentis parametrizado por posição e minutos mínimos jogados.
+- [x] **Fase 3: Camada de Modelagem Gold & Percentis**
+  - [x] Padronização e normalização de funções táticas (`scout_role` e `scout_category` em `core/scouting_roles.py`).
+  - [x] Views analíticas Gold (`v_player_gold_analytics` e `v_player_profiles`) unificando as 4 fontes no SQLite.
+  - [x] Motor analítico (`analytics_engine.py`) com cálculo de P90, percentis relativos por papel tático e motor de similaridade de atletas.
 - [ ] **Fase 4: Expansão da API RESTful**
   - [ ] Endpoints para perfis completos, dados históricos WhoScored e valuation Transfermarkt.
 - [ ] **Fase 5: Dashboard de Scouting Interativo**
