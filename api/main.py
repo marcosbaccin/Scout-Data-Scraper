@@ -400,3 +400,19 @@ def compare_players(
         "count": len(comparisons),
         "players": comparisons,
     }
+
+
+# =============================================================================
+# MONTAGEM DO FRONTEND (DASHBOARD ESTÁTICO)
+# =============================================================================
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
+if os.path.exists(FRONTEND_DIR):
+    app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+
+    @app.get("/dashboard", include_in_schema=False)
+    @app.get("/app", include_in_schema=False)
+    def serve_dashboard():
+        return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))

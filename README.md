@@ -260,15 +260,21 @@ Executa o fluxo completo (Reset opcional ➔ Scrape 4 fontes ➔ Carga ETL ➔ M
 python main.py run-all --reset --force
 ```
 
-### 7. Inicialização da API RESTful
-Inicia o servidor FastAPI local:
+### 7. Inicialização da API RESTful e Dashboard Web
+Inicia o servidor FastAPI e o Dashboard interativo de scouting:
 ```powershell
+# Iniciar servidor e abrir automaticamente o Dashboard no navegador:
+python main.py dashboard
+
+# Ou iniciar apenas o backend da API:
 python main.py api --port 8000
 ```
-Acesse a documentação interativa Swagger em: `http://localhost:8000/docs`.
+- **Dashboard Visual**: `http://localhost:8000/dashboard`
+- **Documentação Swagger da API**: `http://localhost:8000/docs`
 
 #### Endpoints Disponíveis na API:
 - `GET /`: Status da API e total de atletas monitorados.
+- `GET /dashboard`: Interface web completa de scouting esportivo.
 - `GET /metadata`: Filtros dinâmicos (temporadas, ligas, clubes, funções táticas e macro-categorias).
 - `GET /players`: Listagem paginada com busca por nome, papel tático, liga, clube e faixa de valor de mercado.
 - `GET /players/{id}`: Dossiê cadastral detalhado com características qualitativas das 4 fontes.
@@ -297,7 +303,14 @@ Acesse a documentação interativa Swagger em: `http://localhost:8000/docs`.
 - [x] **Fase 4: Expansão da API RESTful**
   - [x] API FastAPI 2.0 com endpoints para busca avançada, dossiê completo, radar de percentis e similaridade vetorial.
   - [x] Endpoints para rankings de líderes e comparação lado a lado de atletas.
-- [ ] **Fase 5: Dashboard de Scouting Interativo**
-  - [ ] Interface visual moderna com gráficos de radar, busca e filtros avançados.
+- [x] **Fase 5: Dashboard de Scouting Interativo**
+  - [x] Interface visual moderna (Dark Glassmorphism, paleta HSL curada, tipografia Outfit/Inter).
+  - [x] Visualização de Gráfico de Radar tático P90 interativo com percentis relativos via Chart.js.
+  - [x] Explorador de atletas com busca reativa debounced e filtros combinados de liga, clube, função e macro-categoria.
+  - [x] Dossiê completo integrando características exclusivas (pontos fortes/fracos, estilo coletivo e valuation).
+  - [x] Módulo de Atletas Similares com link dinâmico de navegação e score vetorial de proximidade (%).
+  - [x] Tabela interativa de líderes e rankings por qualquer métrica de scouting (bruto e P90).
+  - [x] Orquestração CLI integrada: `python main.py dashboard` para subida do servidor e abertura automática no navegador.
+
 
 

@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scout Data Intelligence - Plataforma Profissional de Scouting</title>
+    <meta name="description" content="Plataforma de inteligência e análise de scouting para atletas brasileiros nas 11 principais ligas globais.">
+
+    <!-- Google Fonts: Inter & Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Design System CSS -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+    <!-- TOP NAVBAR -->
+    <header class="navbar">
+        <div class="brand-container">
+            <span class="brand-logo-icon">⚽</span>
+            <div class="brand-title">
+                SCOUT INTELLIGENCE
+                <span class="brand-badge">PRO v2.0</span>
+            </div>
+        </div>
+
+        <nav class="nav-tabs">
+            <button class="nav-tab-btn active" data-tab="explorador">
+                <span>🔍</span> Explorador
+            </button>
+            <button class="nav-tab-btn" data-tab="dossier">
+                <span>🎯</span> Raio-X & Radar
+            </button>
+            <button class="nav-tab-btn" data-tab="rankings">
+                <span>🏆</span> Rankings & Líderes
+            </button>
+        </nav>
+
+        <div class="system-status">
+            <div class="status-dot"></div>
+            <span>11 Ligas Conectadas</span>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT WRAPPER -->
+    <main class="main-wrapper">
+
+        <!-- ===================================================================
+             TAB 1: EXPLORADOR DE JOGADORES
+             =================================================================== -->
+        <section id="tab-explorador" class="tab-pane active">
+            <!-- Filter Bar -->
+            <div class="filter-card">
+                <div class="search-input-wrapper">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="search-player" class="search-input" placeholder="Buscar atleta por nome (ex: Pedro, Rodrygo, Estêvão, André)...">
+                </div>
+
+                <div class="filter-grid">
+                    <div class="filter-group">
+                        <label class="filter-label" for="filter-role">Função Tática</label>
+                        <select id="filter-role" class="filter-select">
+                            <option value="">Todas as Funções</option>
+                            <option value="ST">ST - Centroavante</option>
+                            <option value="WNG">WNG - Ponta / Extremo</option>
+                            <option value="CM_AM">CM/AM - Meia Central/Ofensivo</option>
+                            <option value="DM">DM - Volante / Defensivo</option>
+                            <option value="FB">FB - Lateral (Dir/Esq)</option>
+                            <option value="CB">CB - Zagueiro Central</option>
+                            <option value="GK">GK - Goleiro</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label class="filter-label" for="filter-category">Macro-Categoria</label>
+                        <select id="filter-category" class="filter-select">
+                            <option value="">Todas as Linhas</option>
+                            <option value="ATT">Ataque (ATT)</option>
+                            <option value="MID">Meio-Campo (MID)</option>
+                            <option value="DEF">Defesa (DEF)</option>
+                            <option value="GK">Goleiros (GK)</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label class="filter-label" for="filter-league">Liga Alvo</label>
+                        <select id="filter-league" class="filter-select">
+                            <option value="">Todas as 11 Ligas</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label class="filter-label" for="filter-team">Clube Atual</label>
+                        <select id="filter-team" class="filter-select">
+                            <option value="">Todos os Clubes</option>
+                        </select>
+                    </div>
+
+                    <button id="btn-reset-filters" class="btn-reset-filters">
+                        Limpar Filtros
+                    </button>
+                </div>
+            </div>
+
+            <!-- Header & Players Counter -->
+            <div class="section-header">
+                <h2 class="section-title">Atletas Monitorados</h2>
+                <span id="players-count" class="section-counter">Carregando base de dados...</span>
+            </div>
+
+            <!-- Players Cards Grid -->
+            <div id="players-grid" class="players-grid">
+                <!-- Preenchido dinamicamente via app.js -->
+            </div>
+        </section>
+
+
+        <!-- ===================================================================
+             TAB 2: RAIO-X & RADAR DE SCOUTING (DOSSIÊ)
+             =================================================================== -->
+        <section id="tab-dossier" class="tab-pane">
+            <!-- Hero Dossier Banner -->
+            <div id="dossier-hero" class="dossier-hero">
+                <div class="dossier-hero-left">
+                    <div class="dossier-avatar-large">?</div>
+                    <div>
+                        <h1 class="dossier-name">Selecione um Atleta</h1>
+                        <p class="dossier-subtitle">Clique em qualquer jogador no Explorador para abrir o raio-x analítico completo.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dossier Grid (Radar Chart + Qualitative Insights) -->
+            <div class="dossier-grid">
+                <!-- Left: Radar Chart & Metrics Table -->
+                <div class="radar-container-card">
+                    <h3 class="card-heading">🎯 Radar Tático P90 & Percentis</h3>
+                    <p style="font-size: 0.8rem; color: var(--text-muted); text-align: center; margin-bottom: 0.5rem;">
+                        Percentis calculados comparando apenas atletas do mesmo papel tático.
+                    </p>
+
+                    <div class="radar-chart-box">
+                        <canvas id="radar-canvas"></canvas>
+                    </div>
+
+                    <table class="radar-metrics-table">
+                        <thead>
+                            <tr>
+                                <th>Métrica Analisada</th>
+                                <th>Bruto</th>
+                                <th>P90</th>
+                                <th>Percentil Relativo</th>
+                            </tr>
+                        </thead>
+                        <tbody id="radar-table-body">
+                            <!-- Preenchido via app.js -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Right: Qualitative Panel (WhoScored / SofaScore Traits + Similar Players) -->
+                <div class="qualitative-panel">
+                    <!-- Pontos Fortes -->
+                    <div class="info-panel-card">
+                        <h4 class="card-heading" style="color: var(--accent-emerald);">▲ Pontos Fortes Identificados</h4>
+                        <div id="traits-strengths" class="traits-list">
+                            <!-- Preenchido via app.js -->
+                        </div>
+                    </div>
+
+                    <!-- Pontos Fracos -->
+                    <div class="info-panel-card">
+                        <h4 class="card-heading" style="color: var(--accent-rose);">▼ Pontos Fracos & Alertas</h4>
+                        <div id="traits-weaknesses" class="traits-list">
+                            <!-- Preenchido via app.js -->
+                        </div>
+                    </div>
+
+                    <!-- Estilo Tático -->
+                    <div class="info-panel-card">
+                        <h4 class="card-heading" style="color: var(--accent-cyan);">⚡ Estilo de Jogo & Perfil Coletivo</h4>
+                        <div id="traits-styles" class="traits-list">
+                            <!-- Preenchido via app.js -->
+                        </div>
+                    </div>
+
+                    <!-- Atletas Similares -->
+                    <div class="info-panel-card">
+                        <h4 class="card-heading" style="color: var(--accent-gold);">👥 Atletas Brasileiros Mais Similares</h4>
+                        <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+                            Cálculo de proximidade euclidiana no espaço vetorial de percentis do radar.
+                        </p>
+                        <div id="similar-list">
+                            <!-- Preenchido via app.js -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ===================================================================
+             TAB 3: RANKINGS & LÍDERES
+             =================================================================== -->
+        <section id="tab-rankings" class="tab-pane">
+            <div class="filter-card" style="margin-bottom: 1.5rem;">
+                <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                    <div class="filter-group" style="flex: 1; min-width: 220px;">
+                        <label class="filter-label" for="ranking-metric">Métrica de Liderança</label>
+                        <select id="ranking-metric" class="filter-select">
+                            <option value="goals">Gols (Volume & P90)</option>
+                            <option value="xg">Expected Goals (xG)</option>
+                            <option value="assists">Assistências</option>
+                            <option value="xa">Expected Assists (xA)</option>
+                            <option value="key_passes">Passes Chave</option>
+                            <option value="successful_dribbles">Dribles Bem Sucedidos</option>
+                            <option value="tackles">Desarmes</option>
+                            <option value="interceptions">Interceptações</option>
+                            <option value="sofascore_rating">Rating SofaScore</option>
+                            <option value="fbref_team_ppm">Pontos por Partida (PPM FBref)</option>
+                            <option value="ws_through_balls_per_game">Bolas Enfiadas por Jogo (WhoScored)</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group" style="flex: 1; min-width: 200px;">
+                        <label class="filter-label" for="ranking-role">Função Tática</label>
+                        <select id="ranking-role" class="filter-select">
+                            <option value="">Todas as Funções</option>
+                            <option value="ST">ST - Centroavante</option>
+                            <option value="WNG">WNG - Ponta / Extremo</option>
+                            <option value="CM_AM">CM/AM - Meia Central/Ofensivo</option>
+                            <option value="DM">DM - Volante / Defensivo</option>
+                            <option value="FB">FB - Lateral</option>
+                            <option value="CB">CB - Zagueiro</option>
+                            <option value="GK">GK - Goleiro</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="table-card">
+                <table class="scout-table">
+                    <thead>
+                        <tr>
+                            <th>Posição</th>
+                            <th>Atleta</th>
+                            <th>Função</th>
+                            <th>Clube</th>
+                            <th>Valor Bruto</th>
+                            <th>Por 90 (P90)</th>
+                            <th>Percentil</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rankings-table-body">
+                        <!-- Preenchido via app.js -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- JavaScript Controller -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

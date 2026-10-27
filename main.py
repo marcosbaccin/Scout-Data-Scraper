@@ -291,19 +291,30 @@ class PipelineOrchestrator:
         return True
 
     # -------------------------------------------------------------------------
-    # SERVIDOR FASTAPI
+    # SERVIDOR FASTAPI & DASHBOARD WEB
     # -------------------------------------------------------------------------
-    def start_api(self, host: str = "127.0.0.1", port: int = 8000, reload: bool = True):
+    def start_api(self, host: str = "127.0.0.1", port: int = 8000, reload: bool = True, open_browser: bool = False):
+        import threading
+        import webbrowser
+
         print_banner()
-        print(f"{Style.BOLD}Iniciando API RESTful de Scouting...{Style.RESET}")
-        print(f"{Style.CYAN}Documentação Swagger disponível em: http://{host}:{port}/docs{Style.RESET}\n")
+        print(f"{Style.BOLD}Iniciando Plataforma de Inteligência e Scouting...{Style.RESET}")
+        print(f"  {Style.GREEN}● Dashboard Visual:{Style.RESET} http://{host}:{port}/dashboard")
+        print(f"  {Style.CYAN}● Documentação API:{Style.RESET} http://{host}:{port}/docs\n")
+
+        if open_browser:
+            def _open():
+                time.sleep(1.8)
+                webbrowser.open(f"http://{host}:{port}/dashboard")
+            threading.Thread(target=_open, daemon=True).start()
+
         cmd = [self.py_exec, "-m", "uvicorn", "api.main:app", "--host", host, "--port", str(port)]
         if reload:
             cmd.append("--reload")
         try:
             subprocess.run(cmd, cwd=BASE_DIR)
         except KeyboardInterrupt:
-            print(f"\n{Style.BLUE}[*] Servidor API encerrado pelo usuário.{Style.RESET}")
+            print(f"\n{Style.BLUE}[*] Servidor encerrado pelo usuário.{Style.RESET}")
 
 
 def main():
@@ -352,6 +363,12 @@ def main():
     parser_api.add_argument("--port", type=int, default=8000, help="Porta HTTP (padrão: 8000)")
     parser_api.add_argument("--no-reload", action="store_true", help="Desativa hot reload automático")
 
+    # dashboard
+    parser_dash = subparsers.add_parser("dashboard", help="Inicia o servidor e abre o Dashboard no navegador")
+    parser_dash.add_argument("--host", default="127.0.0.1", help="Host para bind (padrão: 127.0.0.1)")
+    parser_dash.add_argument("--port", type=int, default=8000, help="Porta HTTP (padrão: 8000)")
+    parser_dash.add_argument("--no-reload", action="store_true", help="Desativa hot reload automático")
+
     args = parser.parse_args()
     orchestrator = PipelineOrchestrator()
 
@@ -381,6 +398,8 @@ def main():
         orchestrator.run_all(reset_first=args.reset, force=args.force)
     elif args.command == "api":
         orchestrator.start_api(host=args.host, port=args.port, reload=not args.no_reload)
+    elif args.command == "dashboard":
+        orchestrator.start_api(host=args.host, port=args.port, reload=not args.no_reload, open_browser=True)
 
 
 if __name__ == "__main__":
