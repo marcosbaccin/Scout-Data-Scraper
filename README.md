@@ -190,26 +190,58 @@ copy .env.example .env
 
 ---
 
-## ⚙️ Execução do Pipeline
+## ⚙️ Execução e Orquestração do Pipeline
 
-### 1. Carga no Banco de Dados
-Após a coleta dos dados brutos das 4 fontes, execute os loaders sequencialmente:
+O projeto dispõe do orquestrador central [main.py](file:///c:/Users/Marcos/Scout-Data-Scraper/main.py) com CLI interativa para controle completo do ciclo de vida dos dados:
+
+### 1. Diagnóstico e Telemetria dos Dados
+Exibe o volume de dados coletados e contagem de registros em cada tabela do SQLite:
 ```powershell
-python load_sofascore.py
-python load_fbref.py
-python load_transfermarkt.py
-python load_whoscored.py
+python main.py status
 ```
 
-### 2. Cruzamento de Identidades
-Execute a reconciliação para vincular os IDs das 4 plataformas:
+### 2. Higienização e Reset Geral (Do Zero)
+Para realizar uma nova coleta limpa descartando dados legados e recriando o schema do banco:
 ```powershell
-python match_ids.py
+python main.py reset --force
 ```
 
-### 3. Iniciar a API RESTful
+### 3. Coleta de Dados (Web Scraping)
+Coleta isolada de uma fonte específica ou de todas as 4 fontes sequencialmente:
 ```powershell
-uvicorn api.main:app --reload --port 8000
+# Coleta individual
+python main.py scrape sofascore
+python main.py scrape fbref
+python main.py scrape transfermarkt
+python main.py scrape whoscored
+
+# Coleta global (todas as 4 fontes)
+python main.py scrape all
+```
+
+### 4. Carga no Banco de Dados (ETL)
+Processa os dumps brutos e persiste nas tabelas fato/dimensão:
+```powershell
+python main.py load all
+# ou individualmente: python main.py load sofascore / fbref / transfermarkt / whoscored
+```
+
+### 5. Resolução e Cruzamento de Identidades
+Executa o algoritmo determinístico de matching para unificar os 4 IDs em `player_mapping`:
+```powershell
+python main.py match
+```
+
+### 6. Execução End-to-End Automática
+Executa o fluxo completo (Reset opcional ➔ Scrape 4 fontes ➔ Carga ETL ➔ Matching ➔ Status final):
+```powershell
+python main.py run-all --reset --force
+```
+
+### 7. Inicialização da API RESTful
+Inicia o servidor FastAPI local:
+```powershell
+python main.py api --port 8000
 ```
 Acesse a documentação interativa Swagger em: `http://localhost:8000/docs`.
 
@@ -222,9 +254,10 @@ Acesse a documentação interativa Swagger em: `http://localhost:8000/docs`.
   - [x] Organização estrutural e saneamento dos scripts da raiz.
   - [x] Documentação técnica e arquitetural de referência.
   - [x] Commit inicial rastreável do repositório.
-- [ ] **Fase 2: Orquestrador End-to-End & Resets**
-  - [ ] CLI centralizada com comandos para reset controlado e execução sequencial orquestrada.
-  - [ ] Rate limits dinâmicos e persistência resiliente de checkpoints.
+- [x] **Fase 2: Orquestrador End-to-End & Resets**
+  - [x] CLI centralizada (`main.py`) com comandos de telemetria (`status`), higienização (`reset`), scraping modular, carga ETL e matching.
+  - [x] Módulo dedicado de higienização de dados (`core/reset.py`) para recomeço do zero limpo e seguro.
+  - [x] Isolamento de subprocessos com benchmarks de duração e tolerância a falhas.
 - [ ] **Fase 3: Camada de Modelagem Gold & Percentis**
   - [ ] Views analíticas avançadas para cruzamento completo das 4 fontes.
   - [ ] Engine de percentis parametrizado por posição e minutos mínimos jogados.
@@ -232,3 +265,4 @@ Acesse a documentação interativa Swagger em: `http://localhost:8000/docs`.
   - [ ] Endpoints para perfis completos, dados históricos WhoScored e valuation Transfermarkt.
 - [ ] **Fase 5: Dashboard de Scouting Interativo**
   - [ ] Interface visual moderna com gráficos de radar, busca e filtros avançados.
+

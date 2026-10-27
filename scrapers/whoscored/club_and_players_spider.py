@@ -43,7 +43,9 @@ from seleniumbase import Driver
 BASE_URL = "https://br.whoscored.com"
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(CURRENT_DIR, "data")
-INPUT_TEAMS_JSON = os.path.join(DATA_DIR, "teams_seed.json")
+INPUT_TEAMS_JSON = os.path.join(DATA_DIR, "teams_to_scrape.json")
+if not os.path.exists(INPUT_TEAMS_JSON) and os.path.exists(os.path.join(DATA_DIR, "teams_seed.json")):
+    INPUT_TEAMS_JSON = os.path.join(DATA_DIR, "teams_seed.json")
 CHECKPOINT_FILE = os.path.join(DATA_DIR, "checkpoint_whoscored.json")
 
 TEAMS_CSV_OUT = os.path.join(CURRENT_DIR, "teams_with_characteristics.csv")
