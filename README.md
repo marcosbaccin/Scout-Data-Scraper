@@ -267,6 +267,16 @@ python main.py api --port 8000
 ```
 Acesse a documentação interativa Swagger em: `http://localhost:8000/docs`.
 
+#### Endpoints Disponíveis na API:
+- `GET /`: Status da API e total de atletas monitorados.
+- `GET /metadata`: Filtros dinâmicos (temporadas, ligas, clubes, funções táticas e macro-categorias).
+- `GET /players`: Listagem paginada com busca por nome, papel tático, liga, clube e faixa de valor de mercado.
+- `GET /players/{id}`: Dossiê cadastral detalhado com características qualitativas das 4 fontes.
+- `GET /players/{id}/dossier`: Dossiê analítico com Radar Chart P90 e percentis ranqueados dentro da posição.
+- `GET /players/{id}/similar`: Atletas brasileiros mais similares na mesma função tática com score de proximidade (%).
+- `GET /analytics/rankings`: Tabela de líderes e ranking por qualquer métrica (valor bruto e P90).
+- `GET /analytics/compare`: Comparativo analítico lado a lado de múltiplos atletas.
+
 ---
 
 ## 🗺️ Roadmap de Desenvolvimento
@@ -284,8 +294,10 @@ Acesse a documentação interativa Swagger em: `http://localhost:8000/docs`.
   - [x] Padronização e normalização de funções táticas (`scout_role` e `scout_category` em `core/scouting_roles.py`).
   - [x] Views analíticas Gold (`v_player_gold_analytics` e `v_player_profiles`) unificando as 4 fontes no SQLite.
   - [x] Motor analítico (`analytics_engine.py`) com cálculo de P90, percentis relativos por papel tático e motor de similaridade de atletas.
-- [ ] **Fase 4: Expansão da API RESTful**
-  - [ ] Endpoints para perfis completos, dados históricos WhoScored e valuation Transfermarkt.
+- [x] **Fase 4: Expansão da API RESTful**
+  - [x] API FastAPI 2.0 com endpoints para busca avançada, dossiê completo, radar de percentis e similaridade vetorial.
+  - [x] Endpoints para rankings de líderes e comparação lado a lado de atletas.
 - [ ] **Fase 5: Dashboard de Scouting Interativo**
   - [ ] Interface visual moderna com gráficos de radar, busca e filtros avançados.
+
 
