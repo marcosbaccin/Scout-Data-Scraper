@@ -340,7 +340,6 @@ FBREF_SOURCE_COLUMNS = {
 }
 WHOSCORED_SOURCE_COLUMNS = {
     "ws_motm": "motm",
-    "ws_rating": "rating",
     "ws_through_balls_per_game": "through_balls_per_game",
     "ws_dispossessed_per_game": "dispossessed_per_game",
     "ws_unsuccessful_touches_per_game": "unsuccessful_touches_per_game",

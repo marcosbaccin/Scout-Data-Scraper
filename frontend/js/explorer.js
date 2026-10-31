@@ -618,13 +618,6 @@
             onChange: (vals) => { Ex.identity.foot = vals; scheduleSearch(); },
         });
 
-        Ex.multiWidgets.sources = createPillGroup({
-            container: document.getElementById('ex-pills-sources'),
-            options: Ex.schema.sources,
-            getSelected: () => Ex.identity.require_sources,
-            onChange: (vals) => { Ex.identity.require_sources = vals; scheduleSearch(); },
-        });
-
         // Demographic Dual Range Sliders
         const ib = Ex.schema.identity_bounds;
         Ex.idWidgets.age = createDemographicRange({
@@ -1316,9 +1309,6 @@
         }
         if (id.exclude_weaknesses.length) {
             idChips.push({ label: `Sem fraqueza (${id.exclude_weaknesses.length})`, clear: () => { id.exclude_weaknesses = []; Ex.multiWidgets.weaknesses?.refresh(); } });
-        }
-        if (id.require_sources.length) {
-            idChips.push({ label: `Fontes: ${id.require_sources.join(', ')}`, clear: () => { id.require_sources = []; Ex.multiWidgets.sources?.refresh(); } });
         }
 
         const idBadge = document.getElementById('ex-identity-badge');
