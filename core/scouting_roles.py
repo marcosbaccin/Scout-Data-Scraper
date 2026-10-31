@@ -45,24 +45,24 @@ def classify_position(raw_pos: str) -> Tuple[str, str]:
         return "GK", "GK"
 
     # 2. Ponta / Extremo (avaliado antes de atacante genérico)
-    if any(k in p for k in ['ponta', 'winger', 'extremo', 'segundo ponta', 'm(d)', 'm(e)', 'a(d)', 'a(e)']):
+    if p in ('lw', 'rw', 'ml', 'mr') or any(k in p for k in ['ponta', 'winger', 'extremo', 'segundo ponta', 'm(d)', 'm(e)', 'a(d)', 'a(e)']):
         return "WNG", "ATT"
 
     # 3. Lateral / Ala (avaliado antes de zagueiro/defesa genérica)
-    if any(k in p for k in ['lateral', 'ala', 'full-back', 'wing-back', 'left back', 'right back',
+    if p in ('dl', 'dr', 'lb', 'rb', 'lwb', 'rwb') or any(k in p for k in ['lateral', 'ala', 'full-back', 'wing-back', 'left back', 'right back',
                            'lb', 'rb', 'lwb', 'rwb', 'd(d)', 'd(e)']):
         return "FB", "DEF"
 
     # 4. Zagueiro
-    if any(k in p for k in ['zagueiro', 'centre-back', 'central defender', 'cb', 'd(c)', 'libero']):
+    if p == 'dc' or any(k in p for k in ['zagueiro', 'centre-back', 'central defender', 'cb', 'd(c)', 'libero']):
         return "CB", "DEF"
 
     # 5. Volante
-    if any(k in p for k in ['volante', 'defensive midfield', 'dm', 'md', 'trinco']):
+    if p == 'dm' or any(k in p for k in ['volante', 'defensive midfield', 'meiocampista defensivo', 'dm', 'md', 'trinco']):
         return "DM", "MID"
 
     # 6. Centroavante / Homem de Área
-    if any(k in p for k in ['centroavante', 'striker', 'centre-forward', 'pl', 'ponta de lanca',
+    if p in ('st', 'cf') or any(k in p for k in ['centroavante', 'striker', 'centre-forward', 'pl', 'ponta de lanca',
                            'segundo atacante', 'segundo avancado', 'cf']):
         return "ST", "ATT"
 
@@ -88,13 +88,13 @@ def sql_scout_role_case(column_name: str) -> str:
     c = f"LOWER({column_name})"
     return f"""
     CASE
-        WHEN {c} LIKE '%gol%' OR {c} LIKE '%gk%' OR {c} LIKE '%guarda%' OR {c} = 'g' THEN 'GK'
-        WHEN {c} LIKE '%ponta%' OR {c} LIKE '%winger%' OR {c} LIKE '%extremo%' OR {c} LIKE '%m(d)%' OR {c} LIKE '%m(e)%' OR {c} LIKE '%a(d)%' OR {c} LIKE '%a(e)%' THEN 'WNG'
-        WHEN {c} LIKE '%lateral%' OR {c} LIKE '%ala%' OR {c} LIKE '%back%' OR {c} LIKE '%lb%' OR {c} LIKE '%rb%' OR {c} LIKE '%d(d)%' OR {c} LIKE '%d(e)%' THEN 'FB'
-        WHEN {c} LIKE '%zagueiro%' OR {c} LIKE '%centre-back%' OR {c} LIKE '%cb%' OR {c} LIKE '%d(c)%' OR {c} = 'df' THEN 'CB'
-        WHEN {c} LIKE '%volante%' OR {c} LIKE '%defensive mid%' OR {c} LIKE '%dm%' THEN 'DM'
-        WHEN {c} LIKE '%centroavante%' OR {c} LIKE '%striker%' OR {c} LIKE '%centre-forward%' OR {c} LIKE '%cf%' OR {c} LIKE '%pl%' OR {c} = 'fw' THEN 'ST'
-        WHEN {c} LIKE '%meio%' OR {c} LIKE '%meia%' OR {c} LIKE '%midfield%' OR {c} LIKE '%cm%' OR {c} LIKE '%am%' OR {c} LIKE '%mc%' OR {c} = 'mf' OR {c} = 'm' THEN 'CM_AM'
+        WHEN {c} IN ('gk', 'g') OR {c} LIKE '%gol%' OR {c} LIKE '%gk%' OR {c} LIKE '%guarda%' THEN 'GK'
+        WHEN {c} IN ('lw', 'rw', 'ml', 'mr') OR {c} LIKE '%ponta%' OR {c} LIKE '%winger%' OR {c} LIKE '%extremo%' OR {c} LIKE '%m(d)%' OR {c} LIKE '%m(e)%' OR {c} LIKE '%a(d)%' OR {c} LIKE '%a(e)%' THEN 'WNG'
+        WHEN {c} IN ('dl', 'dr', 'lb', 'rb', 'lwb', 'rwb') OR {c} LIKE '%lateral%' OR {c} LIKE '%ala%' OR {c} LIKE '%back%' OR {c} LIKE '%lb%' OR {c} LIKE '%rb%' OR {c} LIKE '%d(d)%' OR {c} LIKE '%d(e)%' THEN 'FB'
+        WHEN {c} IN ('dc', 'cb', 'df') OR {c} LIKE '%zagueiro%' OR {c} LIKE '%centre-back%' OR {c} LIKE '%cb%' OR {c} LIKE '%d(c)%' THEN 'CB'
+        WHEN {c} = 'dm' OR {c} LIKE '%volante%' OR {c} LIKE '%defensive mid%' OR {c} LIKE '%meiocampista defensivo%' OR {c} LIKE '%dm%' THEN 'DM'
+        WHEN {c} IN ('st', 'cf', 'fw') OR {c} LIKE '%centroavante%' OR {c} LIKE '%striker%' OR {c} LIKE '%centre-forward%' OR {c} LIKE '%cf%' OR {c} LIKE '%pl%' THEN 'ST'
+        WHEN {c} IN ('mc', 'cm', 'am', 'mf', 'm') OR {c} LIKE '%meio%' OR {c} LIKE '%meia%' OR {c} LIKE '%midfield%' OR {c} LIKE '%cm%' OR {c} LIKE '%am%' OR {c} LIKE '%mc%' THEN 'CM_AM'
         WHEN {c} LIKE '%atacante%' OR {c} = 'f' THEN 'ST'
         WHEN {c} LIKE '%defesa%' OR {c} = 'd' THEN 'CB'
         ELSE 'CM_AM'

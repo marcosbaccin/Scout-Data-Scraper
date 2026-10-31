@@ -12,31 +12,11 @@ Centraliza todas as regras de negócio analíticas e derivações estatísticas:
 Todas as views são recriadas de forma idempotente em `core.database.init_db()`.
 """
 
-# Regra SQL para categorização posicional
-SQL_SCOUT_ROLE_CASE = """
-    CASE
-        WHEN LOWER(pos) LIKE '%gol%' OR LOWER(pos) LIKE '%gk%' OR LOWER(pos) LIKE '%guarda%' OR LOWER(pos) = 'g' THEN 'GK'
-        WHEN LOWER(pos) LIKE '%ponta%' OR LOWER(pos) LIKE '%winger%' OR LOWER(pos) LIKE '%extremo%' OR LOWER(pos) LIKE '%m(d)%' OR LOWER(pos) LIKE '%m(e)%' OR LOWER(pos) LIKE '%a(d)%' OR LOWER(pos) LIKE '%a(e)%' THEN 'WNG'
-        WHEN LOWER(pos) LIKE '%lateral%' OR LOWER(pos) LIKE '%ala%' OR LOWER(pos) LIKE '%back%' OR LOWER(pos) LIKE '%lb%' OR LOWER(pos) LIKE '%rb%' OR LOWER(pos) LIKE '%d(d)%' OR LOWER(pos) LIKE '%d(e)%' THEN 'FB'
-        WHEN LOWER(pos) LIKE '%zagueiro%' OR LOWER(pos) LIKE '%centre-back%' OR LOWER(pos) LIKE '%cb%' OR LOWER(pos) LIKE '%d(c)%' OR LOWER(pos) = 'df' THEN 'CB'
-        WHEN LOWER(pos) LIKE '%volante%' OR LOWER(pos) LIKE '%defensive mid%' OR LOWER(pos) LIKE '%dm%' THEN 'DM'
-        WHEN LOWER(pos) LIKE '%centroavante%' OR LOWER(pos) LIKE '%striker%' OR LOWER(pos) LIKE '%centre-forward%' OR LOWER(pos) LIKE '%cf%' OR LOWER(pos) LIKE '%pl%' OR LOWER(pos) = 'fw' THEN 'ST'
-        WHEN LOWER(pos) LIKE '%meio%' OR LOWER(pos) LIKE '%meia%' OR LOWER(pos) LIKE '%midfield%' OR LOWER(pos) LIKE '%cm%' OR LOWER(pos) LIKE '%am%' OR LOWER(pos) LIKE '%mc%' OR LOWER(pos) = 'mf' OR LOWER(pos) = 'm' THEN 'CM_AM'
-        WHEN LOWER(pos) LIKE '%atacante%' OR LOWER(pos) = 'f' THEN 'ST'
-        WHEN LOWER(pos) LIKE '%defesa%' OR LOWER(pos) = 'd' THEN 'CB'
-        ELSE 'CM_AM'
-    END
-"""
+from core.scouting_roles import sql_scout_category_case, sql_scout_role_case
 
-SQL_SCOUT_CATEGORY_CASE = """
-    CASE
-        WHEN scout_role = 'GK' THEN 'GK'
-        WHEN scout_role IN ('CB', 'FB') THEN 'DEF'
-        WHEN scout_role IN ('DM', 'CM_AM') THEN 'MID'
-        WHEN scout_role IN ('WNG', 'ST') THEN 'ATT'
-        ELSE 'MID'
-    END
-"""
+# Regra SQL para categorização posicional (fonte única de verdade em core/scouting_roles.py)
+SQL_SCOUT_ROLE_CASE = sql_scout_role_case("pos")
+SQL_SCOUT_CATEGORY_CASE = sql_scout_category_case("scout_role")
 
 
 VIEWS = {
@@ -145,7 +125,13 @@ VIEWS = {
                 COALESCE(sp.id, fp.id)                                          AS profile_id,
                 COALESCE(sp.name, fp.name, wp.name)                             AS name,
                 wp.full_name                                                    AS full_name,
-                COALESCE(tp.position, sp.position, fp.primary_position, wp.position) AS pos,
+                COALESCE(
+                    (SELECT spp.position FROM sofascore_player_positions spp WHERE spp.player_id = sp.id ORDER BY spp.ordinal ASC LIMIT 1),
+                    tp.position,
+                    wp.position,
+                    fp.primary_position,
+                    sp.position
+                )                                                               AS pos,
                 COALESCE(sp.current_team, tp.current_club, wp.current_team)     AS current_team,
                 COALESCE(sp.current_league, tp.league_name, wp.league_name)     AS current_league,
                 COALESCE(fp.birth_date, tp.birth_date, wp.birth_date)           AS birth_date,
@@ -156,6 +142,7 @@ VIEWS = {
                 tp.market_value_raw,
                 tp.market_value_eur,
                 tp.url                                                          AS transfermarkt_url,
+                pm.fbref_db_id                                                  AS fbref_db_id,
                 fp.fbref_id,
                 sp.id                                                           AS sofascore_id,
                 tp.id                                                           AS transfermarkt_id,
@@ -191,6 +178,38 @@ VIEWS = {
     # TABELA FATO ANALÍTICA GOLD (ESTATÍSTICAS CONSOLIDADAS DAS 4 FONTES)
     # -------------------------------------------------------------------------
     'v_player_gold_analytics': """
+        WITH fb_agg AS (
+            SELECT
+                player_id,
+                CASE
+                    WHEN LENGTH(season) = 9 THEN SUBSTR(season, 3, 2) || '/' || SUBSTR(season, 8, 2)
+                    ELSE season
+                END AS norm_season,
+                AVG(team_ppm) AS team_ppm,
+                SUM(team_goals_on) AS team_goals_on,
+                SUM(team_goals_against_on) AS team_goals_against_on,
+                SUM(matches_completed) AS matches_completed,
+                SUM(subs_in) AS subs_in,
+                SUM(subs_unused) AS subs_unused
+            FROM fbref_outfield_stats
+            WHERE COALESCE(is_national_team, 0) = 0
+            GROUP BY player_id, norm_season
+        ),
+        ws_agg AS (
+            SELECT
+                player_id,
+                CASE
+                    WHEN LENGTH(season) = 9 THEN SUBSTR(season, 3, 2) || '/' || SUBSTR(season, 8, 2)
+                    ELSE season
+                END AS norm_season,
+                SUM(COALESCE(motm, 0)) AS motm,
+                SUM(COALESCE(minutes, 1) * COALESCE(rating, 0)) / NULLIF(SUM(CASE WHEN rating IS NOT NULL THEN COALESCE(minutes, 1) ELSE 0 END), 0) AS rating,
+                SUM(COALESCE(minutes, 1) * COALESCE(through_balls_per_game, 0)) / NULLIF(SUM(CASE WHEN through_balls_per_game IS NOT NULL THEN COALESCE(minutes, 1) ELSE 0 END), 0) AS through_balls_per_game,
+                SUM(COALESCE(minutes, 1) * COALESCE(dispossessed_per_game, 0)) / NULLIF(SUM(CASE WHEN dispossessed_per_game IS NOT NULL THEN COALESCE(minutes, 1) ELSE 0 END), 0) AS dispossessed_per_game,
+                SUM(COALESCE(minutes, 1) * COALESCE(unsuccessful_touches_per_game, 0)) / NULLIF(SUM(CASE WHEN unsuccessful_touches_per_game IS NOT NULL THEN COALESCE(minutes, 1) ELSE 0 END), 0) AS unsuccessful_touches_per_game
+            FROM whoscored_player_season_stats
+            GROUP BY player_id, norm_season
+        )
         SELECT
             p.mapping_id,
             p.name                                                          AS player_name,
@@ -277,17 +296,7 @@ VIEWS = {
 
         FROM sofascore_stats s
         JOIN v_player_profiles p ON p.sofascore_id = s.player_id
-        LEFT JOIN fbref_outfield_stats fb ON fb.player_id = p.fbref_id
-            AND (
-                fb.season = s.season
-                OR s.season LIKE '%' || SUBSTR(fb.season, -2) || '%'
-                OR fb.season LIKE '%' || SUBSTR(s.season, 1, 4) || '%'
-            )
-        LEFT JOIN whoscored_player_season_stats ws ON ws.player_id = p.whoscored_id
-            AND (
-                ws.season = s.season
-                OR s.season LIKE '%' || SUBSTR(ws.season, -2) || '%'
-                OR ws.season LIKE '%' || SUBSTR(s.season, 1, 4) || '%'
-            )
+        LEFT JOIN fb_agg fb ON fb.player_id = p.fbref_db_id AND fb.norm_season = s.season
+        LEFT JOIN ws_agg ws ON ws.player_id = p.whoscored_id AND ws.norm_season = s.season
     """,
 }

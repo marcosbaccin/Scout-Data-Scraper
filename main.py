@@ -95,8 +95,11 @@ class PipelineOrchestrator:
 
         start_time = time.time()
         try:
+            # Garante UTF-8 nos subprocessos no Windows (evita UnicodeEncodeError em cp1252)
+            env = os.environ.copy()
+            env["PYTHONIOENCODING"] = "utf-8"
             # Executa com streaming direto para stdout
-            result = subprocess.run(cmd, cwd=BASE_DIR, check=False)
+            result = subprocess.run(cmd, cwd=BASE_DIR, env=env, check=False)
             elapsed = time.time() - start_time
 
             if result.returncode == 0:

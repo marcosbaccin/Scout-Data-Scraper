@@ -319,7 +319,20 @@ def main():
                 print(f"    -> Fortes: {len(strengths)} | Fracos: {len(weaknesses)} | Estilos: {len(style)} | Brazucas: {len(br_players)}")
 
             except Exception as ex:
-                print(f"    [!] Erro ao processar clube {t_name}: {ex}")
+                print(f"    [!] Erro ao processar clube {t_name}: {ex}. Reiniciando driver...")
+                try:
+                    driver.quit()
+                except Exception:
+                    pass
+                driver = Driver(uc=True, headless=True)
+
+            # Recicla o navegador a cada 80 clubes para liberar RAM
+            if count > 0 and count % 80 == 0:
+                try:
+                    driver.quit()
+                except Exception:
+                    pass
+                driver = Driver(uc=True, headless=True)
 
             # Salva checkpoint a cada 5 clubes ou no final
             if count % 5 == 0:

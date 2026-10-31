@@ -25,6 +25,9 @@ from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from core.browser import new_chrome
+
 BASE_URL = "https://www.transfermarkt.com.br"
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(CURRENT_DIR, "data")
@@ -40,6 +43,86 @@ HEADERS = {
     "Referer": "https://www.transfermarkt.com.br/",
     "Connection": "keep-alive",
 }
+
+
+def _has_roster_table(html: str) -> bool:
+    if not html or "Human Verification" in html:
+        return False
+    return bool(BeautifulSoup(html, "html.parser").find("table", class_="items"))
+
+
+class TransfermarktFetcher:
+    """Sessão HTTP com transição automática para sessão Chrome autenticada quando AWS WAF exige CAPTCHA."""
+
+    def __init__(self):
+        self.session = requests.Session()
+        self.session.headers.update(HEADERS)
+        self.driver = None
+        self.waf_blocked = False
+        self.use_browser_mode = True
+
+    def _fetch_with_browser(self, url):
+        """Usa a janela visível do Chrome (mantendo o cookie/TLS autenticado após verificação humana)."""
+        if self.waf_blocked:
+            return None
+        try:
+            if self.driver is None:
+                print("\n       [*] Abrindo navegador Chrome para verificação humana (AWS WAF) do Transfermarkt...")
+                self.driver = new_chrome()
+                self.driver.set_page_load_timeout(25)
+            try:
+                self.driver.get(url)
+            except Exception:
+                pass
+
+            # Aguarda até 180s (3 min) caso o AWS WAF exiba CAPTCHA manual na janela do Chrome
+            notified = False
+            for _ in range(90):
+                time.sleep(2)
+                html = self.driver.page_source or ""
+                if _has_roster_table(html):
+                    self.use_browser_mode = True
+                    return html
+                if not notified and ("Human Verification" in html or "captcha-container" in html):
+                    print("\n       [!] AÇÃO NECESSÁRIA: Resolva o CAPTCHA 'Human Verification' na janela aberta do Chrome (aguardando até 3 minutos)...", flush=True)
+                    notified = True
+
+            if "Human Verification" in (self.driver.page_source or ""):
+                print("\n       [!] Tempo esgotado aguardando resolução do CAPTCHA AWS WAF. Lote pausado.")
+                self.waf_blocked = True
+            return None
+        except Exception as e:
+            print(f"\n       [!] Erro na sessão Chrome: {e}")
+            return None
+
+    def fetch_page(self, url, retries=2, delay=2):
+        """Realiza requisição HTTP ou usa diretamente o Chrome autenticado após desafio AWS WAF."""
+        if self.waf_blocked:
+            return None
+        if self.use_browser_mode:
+            return self._fetch_with_browser(url)
+
+        for attempt in range(1, retries + 1):
+            try:
+                response = self.session.get(url, timeout=20)
+                if response.status_code == 200 and _has_roster_table(response.text):
+                    return response.text
+                if response.status_code in (403, 405, 429) or "Human Verification" in response.text:
+                    break
+                print(f"       [!] Tentativa {attempt}: status HTTP {response.status_code}")
+            except Exception as e:
+                print(f"       [!] Tentativa {attempt}: falha de conexão: {e}")
+            time.sleep(delay * attempt)
+
+        return self._fetch_with_browser(url)
+
+    def close(self):
+        if self.driver is not None:
+            try:
+                self.driver.quit()
+            except Exception:
+                pass
+            self.driver = None
 
 
 def parse_market_value(val_str):
@@ -75,37 +158,23 @@ def parse_birth_age(text):
     return birth_date, age
 
 
-def fetch_page(url, retries=3, delay=2):
-    """Realiza requisição HTTP com tentativas e tratamento de erros."""
-    for attempt in range(1, retries + 1):
-        try:
-            response = requests.get(url, headers=HEADERS, timeout=15)
-            if response.status_code == 200:
-                return response.text
-            print(f"       [!] Tentativa {attempt}: status HTTP {response.status_code}")
-        except Exception as e:
-            print(f"       [!] Tentativa {attempt}: falha de conexão: {e}")
-        time.sleep(delay * attempt)
-    return None
-
-
-def extract_brazilians_from_club(club_info):
-    """Extrai apenas jogadores com nacionalidade primária brasileira do elenco."""
+def extract_brazilians_from_club(fetcher, club_info):
+    """Extrai apenas jogadores com nacionalidade primária brasileira do elenco. Retorna (lista, sucesso_bool)."""
     club_name = club_info["club_name"]
     club_url = club_info["club_url"]
     league_code = club_info.get("league_code", "")
     league_name = club_info.get("league_name", "")
 
-    html = fetch_page(club_url)
+    html = fetcher.fetch_page(club_url)
     if not html:
         print(f"       [!] Não foi possível baixar a página de {club_name}.")
-        return []
+        return [], False
 
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find("table", class_="items")
     if not table or not table.find("tbody"):
         print(f"       [!] Tabela de elenco não encontrada para {club_name}.")
-        return []
+        return [], False
 
     brazilians = []
     tbody = table.find("tbody")
@@ -175,7 +244,7 @@ def extract_brazilians_from_club(club_info):
             "market_value_eur": mv_eur,
         })
 
-    return brazilians
+    return brazilians, True
 
 
 def scrape_all_players(limit=None):
@@ -211,33 +280,52 @@ def scrape_all_players(limit=None):
         except Exception as e:
             print(f"[!] Erro ao ler checkpoint: {e}")
 
-    for idx, club in enumerate(teams, 1):
-        c_url = club["club_url"]
-        c_name = club["club_name"]
-        c_lg = club["league_code"]
+    fetcher = TransfermarktFetcher()
+    failed_clubs = []
 
-        if c_url in scraped_club_urls:
-            continue
+    try:
+        for idx, club in enumerate(teams, 1):
+            c_url = club["club_url"]
+            c_name = club["club_name"]
+            c_lg = club["league_code"]
 
-        print(f"[{idx:03d}/{total_teams:03d}] [{c_lg}] {c_name}...", end=" ", flush=True)
-        players = extract_brazilians_from_club(club)
-        for p in players:
-            p_id = p["transfermarkt_id"]
-            if p_id:
-                all_players_by_id[p_id] = p
+            if c_url in scraped_club_urls:
+                continue
 
-        scraped_club_urls.add(c_url)
-        print(f"{len(players)} brasileiros encontrados.")
+            print(f"[{idx:03d}/{total_teams:03d}] [{c_lg}] {c_name}...", end=" ", flush=True)
+            players, ok = extract_brazilians_from_club(fetcher, club)
+            if not ok:
+                failed_clubs.append(c_name)
+                if fetcher.waf_blocked:
+                    break
+                continue
 
-        # Checkpoint incremental a cada 10 clubes
-        if idx % 10 == 0:
-            with open(CHECKPOINT_JSON, "w", encoding="utf-8") as f:
-                json.dump({
-                    "scraped_clubs": list(scraped_club_urls),
-                    "players": list(all_players_by_id.values()),
-                }, f, ensure_ascii=False, indent=2)
+            for p in players:
+                p_id = p["transfermarkt_id"]
+                if p_id:
+                    all_players_by_id[p_id] = p
 
-        time.sleep(1.2)  # Pausa respeitosa entre requisições
+            scraped_club_urls.add(c_url)
+            print(f"{len(players)} brasileiros encontrados.")
+
+            # Checkpoint incremental a cada 10 clubes válidos
+            if len(scraped_club_urls) % 10 == 0:
+                with open(CHECKPOINT_JSON, "w", encoding="utf-8") as f:
+                    json.dump({
+                        "scraped_clubs": list(scraped_club_urls),
+                        "players": list(all_players_by_id.values()),
+                    }, f, ensure_ascii=False, indent=2)
+
+            time.sleep(2.2)
+    finally:
+        fetcher.close()
+
+    # Salva checkpoint atualizado
+    with open(CHECKPOINT_JSON, "w", encoding="utf-8") as f:
+        json.dump({
+            "scraped_clubs": list(scraped_club_urls),
+            "players": list(all_players_by_id.values()),
+        }, f, ensure_ascii=False, indent=2)
 
     player_list = list(all_players_by_id.values())
 
@@ -256,8 +344,10 @@ def scrape_all_players(limit=None):
         writer.writerows(player_list)
 
     print("\n" + "=" * 85)
-    print(f"[+] EXTRAÇÃO CONCLUÍDA COM SUCESSO!")
-    print(f"    -> Clubes processados: {len(scraped_club_urls)}")
+    print(f"[+] EXTRAÇÃO CONCLUÍDA!")
+    print(f"    -> Clubes processados com sucesso: {len(scraped_club_urls)}/{total_teams}")
+    if failed_clubs:
+        print(f"    -> Clubes pendentes ({len(failed_clubs)}): {', '.join(failed_clubs[:10])}")
     print(f"    -> Total de jogadores brasileiros extraídos: {len(player_list)}")
     print(f"    -> Arquivo JSON salvo em: {FINAL_JSON}")
     print(f"    -> Arquivo CSV salvo em: {FINAL_CSV}")

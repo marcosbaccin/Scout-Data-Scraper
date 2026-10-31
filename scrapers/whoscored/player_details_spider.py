@@ -392,7 +392,20 @@ def main():
                 print(f"    -> Fortes: {len(chars['strengths'])} | Fracos: {len(chars['weaknesses'])} | Estilos: {len(chars['style_of_play'])} | Histórico: {len(season_stats)} temporadas")
 
             except Exception as ex:
-                print(f"    [!] Erro ao processar jogador {name}: {ex}")
+                print(f"    [!] Erro ao processar jogador {name}: {ex}. Reiniciando driver...")
+                try:
+                    driver.quit()
+                except Exception:
+                    pass
+                driver = Driver(uc=True, headless=True)
+
+            # Recicla o navegador a cada 100 jogadores para liberar RAM
+            if count > 0 and count % 100 == 0:
+                try:
+                    driver.quit()
+                except Exception:
+                    pass
+                driver = Driver(uc=True, headless=True)
 
             # Checkpoint a cada 5 jogadores
             if count % 5 == 0:

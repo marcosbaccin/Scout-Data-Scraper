@@ -292,11 +292,12 @@ class WhoscoredPlayerSeasonStat(Base):
 # Integração entre fontes
 # =====================================================================================
 class PlayerMapping(Base):
-    """Ponte FBref <-> Sofascore <-> Transfermarkt <-> WhoScored (gerada por match_ids.py). 1-para-1 garantido."""
+    """Ponte Sofascore (Primária) <-> FBref <-> Transfermarkt <-> WhoScored (gerada por match_ids.py). 1-para-1 garantido."""
     __tablename__ = 'player_mapping'
 
-    fbref_db_id: Mapped[int] = mapped_column(ForeignKey('fbref_players.id'), primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     sofascore_id: Mapped[Optional[int]] = mapped_column(ForeignKey('sofascore_players.id'), nullable=True, unique=True, index=True)
+    fbref_db_id: Mapped[Optional[int]] = mapped_column(ForeignKey('fbref_players.id'), nullable=True, unique=True, index=True)
     transfermarkt_id: Mapped[Optional[int]] = mapped_column(ForeignKey('transfermarkt_players.id'), nullable=True, unique=True, index=True)
     whoscored_id: Mapped[Optional[int]] = mapped_column(ForeignKey('whoscored_players.id'), nullable=True, unique=True, index=True)
     merged_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)

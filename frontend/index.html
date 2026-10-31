@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Scout Data Intelligence - Plataforma Profissional de Scouting</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚽</text></svg>">
     <meta name="description" content="Plataforma de inteligência e análise de scouting para atletas brasileiros nas 11 principais ligas globais.">
 
     <!-- Google Fonts: Inter & Outfit -->
@@ -51,209 +52,501 @@
     <main class="main-wrapper">
 
         <!-- ===================================================================
-             TAB 1: EXPLORADOR DE JOGADORES
+             TAB 1: EXPLORADOR AVANÇADO DE SCOUTING (143+ ESTATÍSTICAS)
              =================================================================== -->
         <section id="tab-explorador" class="tab-pane active">
-            <!-- Filter Bar -->
-            <div class="filter-card">
-                <div class="search-input-wrapper">
-                    <span class="search-icon">🔍</span>
-                    <input type="text" id="search-player" class="search-input" placeholder="Buscar atleta por nome (ex: Pedro, Rodrygo, Estêvão, André)...">
+            <!-- Barra de Contexto & Guia "Sobre / Como Usar" (inspirada no Scout-Brazil-Serie-A) -->
+            <div class="ex-topbar">
+                <div class="ex-topbar-left">
+                    <h1 class="ex-hero-title">Plataforma Avançada de Scout ⚽</h1>
+                    <p class="ex-hero-sub">
+                        Configure intervalos (mínimo e máximo) em qualquer uma das estatísticas coletadas para encontrar o perfil exato de atleta conforme a sua interpretação tática.
+                    </p>
+                    <div id="ex-meta-caption" class="ex-meta-caption">
+                        📅 Carregando catálogo de estatísticas...
+                    </div>
                 </div>
-
-                <div class="filter-grid">
-                    <div class="filter-group">
-                        <label class="filter-label" for="filter-role">Função Tática</label>
-                        <select id="filter-role" class="filter-select">
-                            <option value="">Todas as Funções</option>
-                            <option value="ST">ST - Centroavante</option>
-                            <option value="WNG">WNG - Ponta / Extremo</option>
-                            <option value="CM_AM">CM/AM - Meia Central/Ofensivo</option>
-                            <option value="DM">DM - Volante / Defensivo</option>
-                            <option value="FB">FB - Lateral (Dir/Esq)</option>
-                            <option value="CB">CB - Zagueiro Central</option>
-                            <option value="GK">GK - Goleiro</option>
-                        </select>
-                    </div>
-
-                    <div class="filter-group">
-                        <label class="filter-label" for="filter-category">Macro-Categoria</label>
-                        <select id="filter-category" class="filter-select">
-                            <option value="">Todas as Linhas</option>
-                            <option value="ATT">Ataque (ATT)</option>
-                            <option value="MID">Meio-Campo (MID)</option>
-                            <option value="DEF">Defesa (DEF)</option>
-                            <option value="GK">Goleiros (GK)</option>
-                        </select>
-                    </div>
-
-                    <div class="filter-group">
-                        <label class="filter-label" for="filter-league">Liga Alvo</label>
-                        <select id="filter-league" class="filter-select">
-                            <option value="">Todas as 11 Ligas</option>
-                        </select>
-                    </div>
-
-                    <div class="filter-group">
-                        <label class="filter-label" for="filter-team">Clube Atual</label>
-                        <select id="filter-team" class="filter-select">
-                            <option value="">Todos os Clubes</option>
-                        </select>
-                    </div>
-
-                    <button id="btn-reset-filters" class="btn-reset-filters">
-                        Limpar Filtros
+                <div class="ex-topbar-right">
+                    <button id="ex-about-btn" class="btn-mini" type="button" aria-expanded="false">
+                        ❔ Como Usar
                     </button>
                 </div>
             </div>
 
-            <!-- Header & Players Counter -->
-            <div class="section-header">
-                <h2 class="section-title">Atletas Monitorados</h2>
-                <span id="players-count" class="section-counter">Carregando base de dados...</span>
+            <!-- Painel Expansível "Sobre / Como Usar" -->
+            <div id="ex-about-box" class="ex-about-box" hidden>
+                <div class="ex-about-grid">
+                    <div>
+                        <h4>1. Recorte &amp; Identificação</h4>
+                        <p>Defina o recorte temporal (última temporada com amostra, temporadas específicas ou carreira), minutagem mínima e filtros demográficos (idade, posição, pé, altura, valor de mercado, liga, clube e características).</p>
+                    </div>
+                    <div>
+                        <h4>2. Todos os Atributos Estatísticos</h4>
+                        <p>Abra qualquer uma das <b>12 categorias</b> (Finalização, Passes, Posse, Defesa, Físico, Goleiros, Impacto em Campo, Decisão) e ajuste os sliders de <b>intervalo (mínimo e máximo)</b> ou digite valores exatos.</p>
+                    </div>
+                    <div>
+                        <h4>3. Total, Por 90' ou Percentil</h4>
+                        <p>Em cada estatística você escolhe se deseja filtrar pelo volume <b>Total</b>, pela taxa <b>/90'</b> (por 90 minutos) ou pelo <b>Percentil (0–100%)</b> comparado aos jogadores da mesma função tática.</p>
+                    </div>
+                    <div>
+                        <h4>4. Ficha Completa, Radar &amp; CSV</h4>
+                        <p>Nos resultados paginados, clique em <b>"Visualizar ficha completa"</b> para expandir todos os números do atleta por categoria, abra o <b>"Raio-X &amp; Radar"</b> ou exporte tudo em <b>CSV</b>.</p>
+                    </div>
+                </div>
             </div>
 
-            <!-- Players Cards Grid -->
-            <div id="players-grid" class="players-grid">
-                <!-- Preenchido dinamicamente via app.js -->
+            <div class="ex-layout">
+                <!-- ============ PAINEL DE CONFIGURAÇÃO DE FILTROS ============ -->
+                <aside id="ex-panel" class="ex-panel" aria-label="Configuração de filtros de scouting">
+                    <div class="ex-panel-head">
+                        <div class="ex-panel-title-wrap">
+                            <h2 class="ex-panel-title">🎛️ Construtor de Perfil</h2>
+                            <label class="ex-auto-toggle" title="Atualiza os resultados automaticamente ao mover sliders">
+                                <input id="ex-auto-search" type="checkbox" checked>
+                                <span>Auto</span>
+                            </label>
+                        </div>
+                        <div class="ex-panel-head-actions">
+                            <button id="ex-clear" class="btn-ghost-danger" type="button">Limpar tudo</button>
+                            <button id="ex-panel-close" class="btn-ghost ex-only-mobile" type="button" aria-label="Fechar filtros">✕</button>
+                        </div>
+                    </div>
+
+                    <div class="ex-panel-cta">
+                        <button id="ex-run-search" class="btn-primary-search" type="button">
+                            🔍 Executar Pesquisa
+                        </button>
+                    </div>
+
+                    <div class="ex-panel-scroll">
+                        <!-- Perfis Prontos & Perfis Salvos pelo Usuário -->
+                        <div class="ex-block">
+                            <label class="filter-label" for="ex-profile-select">Perfis Táticos Prontos &amp; Salvos</label>
+                            <div class="ex-row">
+                                <select id="ex-profile-select" class="filter-select ex-grow">
+                                    <option value="">— Escolha um perfil pronto ou salvo —</option>
+                                </select>
+                                <button id="ex-profile-apply" class="btn-mini" type="button">Aplicar</button>
+                            </div>
+                            <p id="ex-profile-desc" class="ex-hint"></p>
+                            <div class="ex-row" style="margin-top: 0.45rem;">
+                                <button id="ex-profile-save" class="btn-mini ex-grow" type="button">💾 Salvar perfil atual</button>
+                                <button id="ex-profile-delete" class="btn-mini btn-danger" type="button" disabled title="Excluir perfil salvo">🗑️</button>
+                            </div>
+                        </div>
+
+                        <!-- Seção 1: Recorte Estatístico -->
+                        <details class="ex-section" open>
+                            <summary>
+                                <span class="ex-summary-title">📅 Recorte Estatístico</span>
+                            </summary>
+                            <div id="ex-scope" class="ex-section-body"></div>
+                        </details>
+
+                        <!-- Seção 2: Dados de Identificação -->
+                        <details class="ex-section" open>
+                            <summary>
+                                <span class="ex-summary-title">🔎 Dados de Identificação</span>
+                                <span id="ex-identity-badge" class="ex-badge" hidden>0</span>
+                            </summary>
+                            <div id="ex-identity" class="ex-section-body"></div>
+                        </details>
+
+                        <!-- Seção 3: Todas as Estatísticas Coletadas -->
+                        <div class="ex-stats-header-bar">
+                            <div class="ex-stats-head">
+                                <h3 class="ex-stats-title">
+                                    📊 Filtros Estatísticos
+                                    <span id="ex-stats-badge" class="ex-badge" hidden>0</span>
+                                </h3>
+                                <div class="ex-stats-head-btns">
+                                    <label class="ex-only-active-label" title="Exibir apenas estatísticas com filtro ativo">
+                                        <input id="ex-only-active" type="checkbox">
+                                        <span>Só ativos</span>
+                                    </label>
+                                    <button id="ex-toggle-all" class="btn-ghost" type="button">Expandir todas</button>
+                                </div>
+                            </div>
+                            <div class="ex-stat-search">
+                                <span class="search-icon">🔍</span>
+                                <input id="ex-stat-search" type="search" class="search-input"
+                                       placeholder="Buscar atributo (ex: gols, xG, dribles, passes longos, velocidade, PPM)...">
+                            </div>
+                        </div>
+
+                        <div id="ex-stats" class="ex-stats"></div>
+                    </div>
+
+                    <div class="ex-panel-foot ex-only-mobile">
+                        <button id="ex-panel-apply" class="btn-primary-search" type="button">Ver resultados</button>
+                    </div>
+                </aside>
+
+                <!-- ============ PAINEL DE RESULTADOS & FICHAS ============ -->
+                <section class="ex-results" aria-live="polite">
+                    <div class="ex-results-head">
+                        <div>
+                            <h2 id="ex-count" class="section-title">Carregando atletas...</h2>
+                            <p id="ex-scope-desc" class="ex-hint"></p>
+                        </div>
+                        <div class="ex-results-tools">
+                            <button id="ex-panel-open" class="btn-mini ex-only-mobile" type="button">
+                                🎛️ Filtros <span id="ex-open-badge"></span>
+                            </button>
+                            <label class="ex-tool">
+                                <span>Ordenar por</span>
+                                <select id="ex-sort" class="filter-select"></select>
+                            </label>
+                            <button id="ex-sort-dir" class="btn-mini" type="button" title="Alternar ordem crescente/decrescente">↓ Maior</button>
+                            <label class="ex-tool">
+                                <span>Por pág.</span>
+                                <select id="ex-page-size" class="filter-select">
+                                    <option value="10" selected>10</option>
+                                    <option value="20">20</option>
+                                    <option value="50">50</option>
+                                </select>
+                            </label>
+                            <button id="ex-export" class="btn-mini btn-export" type="button" title="Baixar todos os resultados filtrados em CSV">
+                                ⬇️ Baixar CSV
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Chips de Filtros Ativos -->
+                    <div id="ex-chips" class="ex-chips"></div>
+
+                    <!-- Lista de Cards de Jogadores com Ficha Expansível -->
+                    <div id="ex-results" class="ex-results-list"></div>
+
+                    <!-- Paginação -->
+                    <div id="ex-pager" class="ex-pager"></div>
+                </section>
             </div>
+            <div id="ex-backdrop" class="ex-backdrop" hidden></div>
         </section>
 
 
         <!-- ===================================================================
-             TAB 2: RAIO-X & RADAR DE SCOUTING (DOSSIÊ)
+             TAB 2: RAIO-X & RADAR DE SCOUTING (TODAS AS 141 ESTATÍSTICAS)
              =================================================================== -->
         <section id="tab-dossier" class="tab-pane">
+            <div class="ex-topbar">
+                <div class="ex-topbar-left">
+                    <h1 class="ex-hero-title">Raio-X &amp; Radar Analítico Completo 🎯</h1>
+                    <p class="ex-hero-sub">
+                        Inspecione todas as 141 estatísticas coletadas, compare com a média da função tática e personalize os eixos do Gráfico de Radar com qualquer atributo.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Barra de Seleção Direta de Atleta, Comparação e Recorte -->
+            <div class="filter-card" style="margin-bottom: 1.25rem;">
+                <div class="rx-controls-grid">
+                    <div class="filter-group rx-span-2">
+                        <label class="filter-label" for="dossier-player-search">Buscar &amp; Selecionar Atleta</label>
+                        <div class="rx-Combo">
+                            <input id="dossier-player-search" type="search" class="ex-input-sm"
+                                   placeholder="Filtrar atleta ou clube (ex: Raphinha, Pedro, Flamengo)...">
+                            <select id="dossier-player-select" class="filter-select"></select>
+                        </div>
+                    </div>
+
+                    <div class="filter-group rx-span-2">
+                        <label class="filter-label" for="dossier-compare-search">Comparar no Radar (2º Atleta Opcional)</label>
+                        <div class="rx-Combo">
+                            <input id="dossier-compare-search" type="search" class="ex-input-sm"
+                                   placeholder="Filtrar 2º atleta p/ sobrepor...">
+                            <div style="display: flex; gap: 0.4rem;">
+                                <select id="dossier-compare-select" class="filter-select" style="flex: 1;">
+                                    <option value="">Sem comparação (apenas atleta principal)</option>
+                                </select>
+                                <button id="dossier-compare-clear" type="button" class="btn-ghost" title="Remover comparação" hidden>✕</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="filter-group">
+                        <label class="filter-label" for="dossier-season">Recorte de Temporada</label>
+                        <select id="dossier-season" class="filter-select">
+                            <option value="latest" selected>Última temporada c/ amostra</option>
+                            <option value="all">Carreira completa agregada</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label class="filter-label" for="dossier-min-minutes">Mín. Minutos (Pares)</label>
+                        <input id="dossier-min-minutes" type="number" min="0" step="90" value="450"
+                               class="ex-input-sm" style="padding: 0.68rem 0.8rem;">
+                    </div>
+                </div>
+            </div>
+
             <!-- Hero Dossier Banner -->
             <div id="dossier-hero" class="dossier-hero">
                 <div class="dossier-hero-left">
                     <div class="dossier-avatar-large">?</div>
                     <div>
-                        <h1 class="dossier-name">Selecione um Atleta</h1>
-                        <p class="dossier-subtitle">Clique em qualquer jogador no Explorador para abrir o raio-x analítico completo.</p>
+                        <h1 class="dossier-name">Carregando Atleta...</h1>
+                        <p class="dossier-subtitle">Selecione qualquer jogador acima ou no Explorador para abrir o raio-x analítico completo.</p>
                     </div>
                 </div>
             </div>
 
-            <!-- Dossier Grid (Radar Chart + Qualitative Insights) -->
+            <!-- Dossier Grid (Radar Chart Configurável + Qualitative Insights) -->
             <div class="dossier-grid">
-                <!-- Left: Radar Chart & Metrics Table -->
+                <!-- Left: Radar Chart & Custom Axis Selector (141 Statistics) -->
                 <div class="radar-container-card">
-                    <h3 class="card-heading">🎯 Radar Tático P90 & Percentis</h3>
-                    <p style="font-size: 0.8rem; color: var(--text-muted); text-align: center; margin-bottom: 0.5rem;">
-                        Percentis calculados comparando apenas atletas do mesmo papel tático.
-                    </p>
+                    <div class="rx-radar-head">
+                        <div>
+                            <h3 class="card-heading" style="margin-bottom: 0.2rem;">🎯 Radar Tático P90 &amp; Percentis</h3>
+                            <p style="font-size: 0.78rem; color: var(--text-muted); margin: 0;">
+                                Percentis (0–100%) calculados frente aos atletas da mesma função tática. Personalize com qualquer uma das 141 estatísticas.
+                            </p>
+                        </div>
+                        <span id="dossier-radar-axis-count" class="ex-badge">8 eixos</span>
+                    </div>
+
+                    <!-- Configurador de Eixos do Radar (Todas as 141 Estatísticas) -->
+                    <div class="rx-radar-builder">
+                        <input id="dossier-radar-search" type="search" class="ex-input-sm"
+                               placeholder="Filtrar atributo p/ o Radar..." style="max-width: 195px;">
+                        <select id="dossier-radar-add" class="filter-select" style="flex: 1; min-width: 200px;">
+                            <option value="">+ Adicionar estatística ao Radar (141 disponíveis)...</option>
+                        </select>
+                        <button id="dossier-radar-reset" type="button" class="btn-ghost" title="Restaurar os 8 atributos padrão da função tática">
+                            ↺ Padrão da Função
+                        </button>
+                    </div>
 
                     <div class="radar-chart-box">
                         <canvas id="radar-canvas"></canvas>
                     </div>
 
-                    <table class="radar-metrics-table">
-                        <thead>
-                            <tr>
-                                <th>Métrica Analisada</th>
-                                <th>Bruto</th>
-                                <th>P90</th>
-                                <th>Percentil Relativo</th>
-                            </tr>
-                        </thead>
-                        <tbody id="radar-table-body">
-                            <!-- Preenchido via app.js -->
-                        </tbody>
-                    </table>
+                    <div style="width: 100%; overflow-x: auto;">
+                        <table class="radar-metrics-table">
+                            <thead>
+                                <tr id="radar-table-head-row">
+                                    <th>Atributo no Radar</th>
+                                    <th>Total / Taxa</th>
+                                    <th>Por 90'</th>
+                                    <th>Média Função</th>
+                                    <th>Percentil Posicional</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="radar-table-body">
+                                <!-- Preenchido via app.js -->
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
-                <!-- Right: Qualitative Panel (WhoScored / SofaScore Traits + Similar Players) -->
+                <!-- Right: Qualitative Panel (Características & Perfil Tático + Atletas Similares) -->
                 <div class="qualitative-panel">
                     <!-- Pontos Fortes -->
                     <div class="info-panel-card">
                         <h4 class="card-heading" style="color: var(--accent-emerald);">▲ Pontos Fortes Identificados</h4>
-                        <div id="traits-strengths" class="traits-list">
-                            <!-- Preenchido via app.js -->
-                        </div>
+                        <div id="traits-strengths" class="traits-list"></div>
                     </div>
 
                     <!-- Pontos Fracos -->
                     <div class="info-panel-card">
-                        <h4 class="card-heading" style="color: var(--accent-rose);">▼ Pontos Fracos & Alertas</h4>
-                        <div id="traits-weaknesses" class="traits-list">
-                            <!-- Preenchido via app.js -->
-                        </div>
+                        <h4 class="card-heading" style="color: var(--accent-rose);">▼ Pontos Fracos &amp; Alertas</h4>
+                        <div id="traits-weaknesses" class="traits-list"></div>
                     </div>
 
                     <!-- Estilo Tático -->
                     <div class="info-panel-card">
-                        <h4 class="card-heading" style="color: var(--accent-cyan);">⚡ Estilo de Jogo & Perfil Coletivo</h4>
-                        <div id="traits-styles" class="traits-list">
-                            <!-- Preenchido via app.js -->
-                        </div>
+                        <h4 class="card-heading" style="color: var(--accent-cyan);">⚡ Estilo de Jogo &amp; Perfil Coletivo</h4>
+                        <div id="traits-styles" class="traits-list"></div>
                     </div>
 
                     <!-- Atletas Similares -->
                     <div class="info-panel-card">
                         <h4 class="card-heading" style="color: var(--accent-gold);">👥 Atletas Brasileiros Mais Similares</h4>
                         <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 0.75rem;">
-                            Cálculo de proximidade euclidiana no espaço vetorial de percentis do radar.
+                            Proximidade euclidiana calculada sobre os eixos ativos do Radar dentro da mesma função tática.
                         </p>
-                        <div id="similar-list">
-                            <!-- Preenchido via app.js -->
-                        </div>
+                        <div id="similar-list"></div>
                     </div>
+                </div>
+            </div>
+
+            <!-- ===============================================================
+                 RAIO-X ESTATÍSTICO COMPLETO: TODAS AS 141 ESTATÍSTICAS (12 CATEGORIAS)
+                 =============================================================== -->
+            <div class="rx-full-section">
+                <div class="rx-full-header">
+                    <div>
+                        <h2 class="card-heading" style="font-size: 1.2rem; margin-bottom: 0.2rem;">
+                            📊 Raio-X Estatístico Completo — Todas as Estatísticas Coletadas
+                        </h2>
+                        <p id="dossier-stats-summary" style="font-size: 0.82rem; color: var(--text-secondary); margin: 0;">
+                            Exibindo todas as 141 estatísticas distribuídas em 12 categorias (clique em 🎯 para fixar/remover qualquer métrica no Radar).
+                        </p>
+                    </div>
+
+                    <div class="rx-full-actions">
+                        <div class="ex-modes" id="dossier-stat-filter-toggle">
+                            <button type="button" class="ex-mode-btn active" data-filter="all">Todas (141)</button>
+                            <button type="button" class="ex-mode-btn" data-filter="nonzero">Com Registro (&gt; 0)</button>
+                        </div>
+                        <button id="dossier-expand-all" type="button" class="btn-ghost">Expandir todas</button>
+                        <button id="dossier-collapse-all" type="button" class="btn-ghost">Recolher todas</button>
+                    </div>
+                </div>
+
+                <div class="rx-full-filters">
+                    <input id="dossier-stat-search" type="search" class="ex-input-sm"
+                           placeholder="🔎 Filtrar entre as 141 estatísticas (ex: gols, passes longos, dribles, velocidade, defesas, PPM, MOTM)..."
+                           style="flex: 2; min-width: 240px;">
+                    <select id="dossier-cat-filter" class="filter-select" style="flex: 1; min-width: 210px;">
+                        <option value="">Todas as 12 Categorias</option>
+                    </select>
+                </div>
+
+                <div id="dossier-all-stats" class="rx-categories-stack">
+                    <!-- Preenchido via app.js com todas as 12 categorias e 141 estatísticas -->
                 </div>
             </div>
         </section>
 
 
         <!-- ===================================================================
-             TAB 3: RANKINGS & LÍDERES
+             TAB 3: RANKINGS & LÍDERES (TODAS AS 141 ESTATÍSTICAS)
              =================================================================== -->
         <section id="tab-rankings" class="tab-pane">
-            <div class="filter-card" style="margin-bottom: 1.5rem;">
-                <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
-                    <div class="filter-group" style="flex: 1; min-width: 220px;">
-                        <label class="filter-label" for="ranking-metric">Métrica de Liderança</label>
-                        <select id="ranking-metric" class="filter-select">
-                            <option value="goals">Gols (Volume & P90)</option>
-                            <option value="xg">Expected Goals (xG)</option>
-                            <option value="assists">Assistências</option>
-                            <option value="xa">Expected Assists (xA)</option>
-                            <option value="key_passes">Passes Chave</option>
-                            <option value="successful_dribbles">Dribles Bem Sucedidos</option>
-                            <option value="tackles">Desarmes</option>
-                            <option value="interceptions">Interceptações</option>
-                            <option value="sofascore_rating">Rating SofaScore</option>
-                            <option value="fbref_team_ppm">Pontos por Partida (PPM FBref)</option>
-                            <option value="ws_through_balls_per_game">Bolas Enfiadas por Jogo (WhoScored)</option>
-                        </select>
-                    </div>
-
-                    <div class="filter-group" style="flex: 1; min-width: 200px;">
-                        <label class="filter-label" for="ranking-role">Função Tática</label>
-                        <select id="ranking-role" class="filter-select">
-                            <option value="">Todas as Funções</option>
-                            <option value="ST">ST - Centroavante</option>
-                            <option value="WNG">WNG - Ponta / Extremo</option>
-                            <option value="CM_AM">CM/AM - Meia Central/Ofensivo</option>
-                            <option value="DM">DM - Volante / Defensivo</option>
-                            <option value="FB">FB - Lateral</option>
-                            <option value="CB">CB - Zagueiro</option>
-                            <option value="GK">GK - Goleiro</option>
-                        </select>
-                    </div>
+            <div class="ex-topbar">
+                <div class="ex-topbar-left">
+                    <h1 class="ex-hero-title">Rankings &amp; Líderes por Atributo 🏆</h1>
+                    <p class="ex-hero-sub">
+                        Classifique os melhores atletas brasileiros em qualquer uma das 141 estatísticas coletadas e compare com as métricas de referência por posição.
+                    </p>
                 </div>
             </div>
 
-            <div class="table-card">
+            <div class="filter-card" style="margin-bottom: 1.25rem;">
+                <!-- Linha 1: Busca rápida + Seletor de todas as 141 estatísticas + Modo + Ordem -->
+                <div class="rk-controls-grid">
+                    <div class="filter-group rk-span-2">
+                        <label class="filter-label" for="ranking-metric-search">Filtrar Estatística</label>
+                        <input id="ranking-metric-search" type="search" class="ex-input-sm"
+                               placeholder="Digite para filtrar (ex: gols, dribles, passes longos, velocidade, defesas, PPM)...">
+                    </div>
+
+                    <div class="filter-group rk-span-3">
+                        <label class="filter-label" for="ranking-metric">Atributo Selecionado (141 Estatísticas)</label>
+                        <select id="ranking-metric" class="filter-select">
+                            <option value="goals">Gols</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label class="filter-label" for="ranking-mode">Critério</label>
+                        <select id="ranking-mode" class="filter-select">
+                            <option value="p90" selected>Por 90' (/90)</option>
+                            <option value="total">Total / Taxa</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label class="filter-label" for="ranking-order">Direção</label>
+                        <select id="ranking-order" class="filter-select">
+                            <option value="desc" selected>↓ Maiores (Top)</option>
+                            <option value="asc">↑ Menores</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Linha 2: Função, Liga, Temporada, Minutagem mínima e Top N -->
+                <div class="rk-controls-grid" style="margin-top: 0.9rem;">
+                    <div class="filter-group">
+                        <label class="filter-label" for="ranking-role">Função Tática</label>
+                        <select id="ranking-role" class="filter-select">
+                            <option value="">Todas as Funções</option>
+                            <option value="ST">ST · Centroavante</option>
+                            <option value="WNG">WNG · Ponta / Extremo</option>
+                            <option value="CM_AM">CM/AM · Meia Central/Ofensivo</option>
+                            <option value="DM">DM · Volante / Defensivo</option>
+                            <option value="FB">FB · Lateral / Ala</option>
+                            <option value="CB">CB · Zagueiro</option>
+                            <option value="GK">GK · Goleiro</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label class="filter-label" for="ranking-league">Liga Atual</label>
+                        <select id="ranking-league" class="filter-select">
+                            <option value="">Todas as 11 Ligas</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label class="filter-label" for="ranking-season">Recorte de Temporada</label>
+                        <select id="ranking-season" class="filter-select">
+                            <option value="latest" selected>Última temporada c/ amostra</option>
+                            <option value="all">Carreira completa agregada</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label class="filter-label" for="ranking-min-minutes">Mínimo de Minutos</label>
+                        <input id="ranking-min-minutes" type="number" min="0" step="90" value="450" class="ex-input-sm" style="padding: 0.68rem 0.8rem;">
+                    </div>
+
+                    <div class="filter-group">
+                        <label class="filter-label" for="ranking-limit">Top N</label>
+                        <select id="ranking-limit" class="filter-select">
+                            <option value="10">Top 10</option>
+                            <option value="15">Top 15</option>
+                            <option value="20" selected>Top 20</option>
+                            <option value="30">Top 30</option>
+                            <option value="50">Top 50</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Banner descritivo do atributo selecionado -->
+                <div id="ranking-meta-bar" class="rk-meta-bar"></div>
+            </div>
+
+            <!-- Gráfico Horizontal de Líderes -->
+            <div class="rk-chart-card">
+                <div class="rk-section-head">
+                    <h3 id="ranking-chart-title" class="card-heading" style="margin: 0;">📊 Visualização dos Líderes</h3>
+                    <span class="ex-hint" style="margin: 0;">Clique em qualquer barra ou linha para abrir o Raio-X &amp; Radar do atleta</span>
+                </div>
+                <div id="ranking-chart-wrap" class="rk-chart-wrap">
+                    <canvas id="ranking-bar-canvas"></canvas>
+                </div>
+            </div>
+
+            <!-- Contexto Estatístico: Benchmarks por Posição (como no Scout-Brazil-Serie-A) -->
+            <div class="rk-bench-section">
+                <div class="rk-section-head">
+                    <h3 class="card-heading" style="margin: 0;">📐 Métricas de Referência por Posição</h3>
+                    <div class="ex-modes" id="ranking-bench-toggle">
+                        <button type="button" class="ex-mode-btn active" data-bench="category">Por Linha (4)</button>
+                        <button type="button" class="ex-mode-btn" data-bench="role">Por Função Tática (7)</button>
+                    </div>
+                </div>
+                <div id="ranking-benchmarks" class="rk-bench-grid"></div>
+            </div>
+
+            <!-- Tabela Analítica Detalhada -->
+            <div class="table-card" style="overflow-x: auto;">
                 <table class="scout-table">
                     <thead>
                         <tr>
-                            <th>Posição</th>
+                            <th>#</th>
                             <th>Atleta</th>
                             <th>Função</th>
-                            <th>Clube</th>
-                            <th>Valor Bruto</th>
-                            <th>Por 90 (P90)</th>
-                            <th>Percentil</th>
+                            <th>Clube &amp; Liga</th>
+                            <th>Amostra</th>
+                            <th>Total / Taxa</th>
+                            <th>Por 90' (/90)</th>
+                            <th>Valor Mercado</th>
+                            <th>Percentil Posicional</th>
                         </tr>
                     </thead>
                     <tbody id="rankings-table-body">
@@ -265,7 +558,8 @@
 
     </main>
 
-    <!-- JavaScript Controller -->
+    <!-- JavaScript Controllers -->
+    <script src="/static/js/explorer.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
 </html>

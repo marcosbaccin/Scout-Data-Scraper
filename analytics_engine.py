@@ -9,9 +9,11 @@ por grupo posicional e índice de similaridade entre atletas:
 - Algoritmo de Similaridade de Atletas (Cosine / Euclidean Similarity em vetor de percentis).
 """
 import argparse
+from collections import OrderedDict
 import os
 import sqlite3
 import sys
+import threading
 from typing import Dict, List, Optional, Any
 
 if hasattr(sys.stdout, 'reconfigure'):
@@ -25,6 +27,7 @@ import pandas as pd
 # Permite importação dos módulos centrais
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from core.scouting_roles import classify_position
+from core.seasons import season_year
 from core.settings import DB_PATH
 
 
@@ -36,8 +39,7 @@ RAW_VOLUME_METRICS = [
     'ground_duels_won', 'aerial_duels_won', 'duels_won_total', 'fouls',
     'yellow_cards', 'red_cards', 'fbref_team_goals_on', 'fbref_team_goals_against_on',
     'fbref_team_goal_diff_on', 'fbref_matches_completed', 'fbref_subs_in',
-    'ws_motm', 'ws_through_balls_per_game', 'ws_dispossessed_per_game',
-    'ws_unsuccessful_touches_per_game'
+    'ws_motm'
 ]
 
 # Configuração de métricas ideais para o Radar por Função Tática
@@ -107,6 +109,8 @@ RADAR_METRICS_BY_ROLE = {
 class ScoutAnalyticsEngine:
     def __init__(self, db_path: Optional[str] = None):
         self.db_path = db_path or DB_PATH
+        self._lock = threading.RLock()
+        self._cache: "OrderedDict[tuple, pd.DataFrame]" = OrderedDict()
 
     def _get_connection(self) -> sqlite3.Connection:
         if not os.path.exists(self.db_path):
@@ -123,6 +127,20 @@ class ScoutAnalyticsEngine:
         """
         Retorna a base Gold com P90 calculado e Percentis ranqueados dentro de cada grupo posicional.
         """
+        if not os.path.exists(self.db_path):
+            raise FileNotFoundError(f"Banco de dados '{self.db_path}' não encontrado.")
+
+        mtime = os.path.getmtime(self.db_path)
+        cache_key = (mtime, season or "", competition or "", int(min_minutes))
+
+        with self._lock:
+            cached = self._cache.get(cache_key)
+            if cached is not None:
+                self._cache.move_to_end(cache_key)
+                if scout_role:
+                    return cached[cached['scout_role'] == scout_role].reset_index(drop=True)
+                return cached.copy()
+
         conn = self._get_connection()
         where_clauses = ["minutes_played >= ?"]
         params: List[Any] = [min_minutes]
@@ -135,10 +153,6 @@ class ScoutAnalyticsEngine:
             where_clauses.append("competition LIKE ?")
             params.append(f"%{competition}%")
 
-        if scout_role:
-            where_clauses.append("scout_role = ?")
-            params.append(scout_role)
-
         sql = f"""
         SELECT *
         FROM v_player_gold_analytics
@@ -149,6 +163,15 @@ class ScoutAnalyticsEngine:
 
         if df.empty:
             return df
+
+        # Seleciona a amostra mais recente e representativa por jogador (evita duplicatas de temporadas passadas)
+        df['_season_year'] = df['season'].apply(season_year)
+        df = (
+            df.sort_values(by=['_season_year', 'minutes_played'], ascending=[False, False])
+            .drop_duplicates(subset=['mapping_id'], keep='first')
+            .drop(columns=['_season_year'])
+            .reset_index(drop=True)
+        )
 
         # 1. Calcula Per 90 para métricas volumétricas
         for col in RAW_VOLUME_METRICS:
@@ -171,7 +194,14 @@ class ScoutAnalyticsEngine:
             # Ranking percentil relativo ao grupo posicional
             df[pct_col] = df.groupby('scout_role')[col].rank(pct=True, method='average') * 100.0
 
-        return df
+        with self._lock:
+            self._cache[cache_key] = df
+            while len(self._cache) > 12:
+                self._cache.popitem(last=False)
+
+        if scout_role:
+            return df[df['scout_role'] == scout_role].reset_index(drop=True)
+        return df.copy()
 
     def get_player_dossier(
         self,
@@ -193,6 +223,8 @@ class ScoutAnalyticsEngine:
             player_df = df[df['player_name'].str.contains(player_identifier, case=False, na=False)]
 
         if player_df.empty:
+            if min_minutes > 90:
+                return self.get_player_dossier(player_identifier, season=season, min_minutes=90)
             return None
 
         row = player_df.iloc[0]
@@ -219,11 +251,16 @@ class ScoutAnalyticsEngine:
                 "percentile": round(float(pct_val), 1) if pct_val is not None and not pd.isna(pct_val) else None,
             })
 
+        def _clean_trait(v: Any) -> Any:
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                return None
+            return v
+
         return {
             "profile": {
                 "mapping_id": int(row['mapping_id']),
                 "name": str(row['player_name']),
-                "full_name": str(row['full_name']) if row['full_name'] else None,
+                "full_name": str(row['full_name']) if pd.notna(row['full_name']) and row['full_name'] else None,
                 "scout_role": str(row['scout_role']),
                 "scout_category": str(row['scout_category']),
                 "position_raw": str(row['position_raw']),
@@ -238,12 +275,12 @@ class ScoutAnalyticsEngine:
                 "whoscored_url": str(row['whoscored_url']) if pd.notna(row['whoscored_url']) else None,
             },
             "characteristics": {
-                "player_strengths": row.get('player_strengths'),
-                "player_weaknesses": row.get('player_weaknesses'),
-                "player_style_of_play": row.get('player_style_of_play'),
-                "team_strengths": row.get('team_strengths'),
-                "team_weaknesses": row.get('team_weaknesses'),
-                "team_style": row.get('team_style'),
+                "player_strengths": _clean_trait(row.get('player_strengths')),
+                "player_weaknesses": _clean_trait(row.get('player_weaknesses')),
+                "player_style_of_play": _clean_trait(row.get('player_style_of_play')),
+                "team_strengths": _clean_trait(row.get('team_strengths')),
+                "team_weaknesses": _clean_trait(row.get('team_weaknesses')),
+                "team_style": _clean_trait(row.get('team_style')),
             },
             "radar": radar_items,
         }

@@ -1,384 +1,456 @@
+"""
+Algoritmo Determinístico e Multi-Estágio de Resolução de Identidades (Entity Matching) nas 4 Fontes.
+
+Arquitetura:
+- SofaScore é a FONTE PRIMÁRIA (todos os 874 atletas do SofaScore compõem a espinha dorsal da player_mapping).
+- Vincula 1-para-1 sem colisões com:
+  1. FBref (fbref_players)
+  2. Transfermarkt (transfermarkt_players)
+  3. WhoScored (whoscored_players)
+- Combina normalização semântica de nomes, tradução/limpeza canônica de clubes, compatibilidade posicional
+  multilíngue (PT/EN via core.scouting_roles) e validação cruzada exata de data de nascimento (birth_date).
+"""
+import datetime as dt
 import os
+import re
 import sqlite3
 import sys
 import unicodedata
 from collections import defaultdict
+from difflib import SequenceMatcher
+from functools import lru_cache
+from typing import Optional, Tuple
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from core.database import init_db
+from core.scouting_roles import classify_position
 from core.settings import DB_PATH
 
+CLUB_STOPWORDS = {
+    "fc", "cf", "sc", "ec", "ac", "cr", "se", "afc", "bc", "sfc", "ud", "cd",
+    "rcd", "rc", "fk", "sv", "vfb", "tsg", "1", "04", "05", "07", "1899", "1907",
+    "1913", "29", "de", "da", "do", "clube", "club", "calcio", "balompie", "futebol",
+}
 
-def normalize(text):
-    """Remove acentos, converte para minúsculo e tira espaços sobrando."""
+CLUB_SYNONYMS = {
+    "marselha": "marseille",
+    "olympique marselha": "marseille",
+    "olympique marseille": "marseille",
+    "paris sg": "paris saint germain",
+    "psg": "paris saint germain",
+    "manchester utd": "manchester united",
+    "newcastle": "newcastle united",
+    "tottenham": "tottenham hotspur",
+    "brighton": "brighton hove albion",
+    "nottingham": "nottingham forest",
+    "wolves": "wolverhampton",
+    "inter milao": "inter",
+    "internazionale": "inter",
+    "bayern munique": "bayern munich",
+    "bayern munchen": "bayern munich",
+    "colonia": "koln",
+    "union berlim": "union berlin",
+    "gladbach": "monchengladbach",
+    "borussia mgladbach": "monchengladbach",
+    "sporting kc": "sporting kansas city",
+    "nycfc": "new york city",
+    "rb new york": "new york red bulls",
+    "red bull new york": "new york red bulls",
+    "ne revolution": "new england revolution",
+    "sj earthquakes": "san jose earthquakes",
+    "lafc": "los angeles",
+    "dc united": "d c united",
+    "atlanta utd": "atlanta united",
+    "minnesota utd": "minnesota united",
+    "st louis": "st louis city",
+    "atletico mg": "atletico mineiro",
+    "athletico pr": "athletico paranaense",
+    "athletico": "athletico paranaense",
+    "botafogo rj": "botafogo",
+    "rb bragantino": "bragantino",
+    "red bull bragantino": "bragantino",
+    "vit guimaraes": "vitoria sc",
+    "vitoria guimaraes": "vitoria sc",
+    "acad viseu": "academico viseu",
+    "estrela": "estrela amadora",
+    "sparta r": "sparta rotterdam",
+    "dep a coruna": "deportivo coruna",
+    "deportivo a coruna": "deportivo coruna",
+    "racing sant": "racing",
+    "racing santander": "racing",
+    "real racing": "racing",
+    "celta vigo": "celta",
+    "unam": "pumas unam",
+    "club universidad nacional": "pumas unam",
+    "uanl": "tigres",
+    "tigres uanl": "tigres",
+}
+
+
+@lru_cache(maxsize=8192)
+def normalize(text) -> str:
+    """Remove acentos, pontuação e converte para minúsculo."""
     if not text:
         return ""
-    text = unicodedata.normalize('NFKD', str(text))
-    return "".join([c for c in text if not unicodedata.combining(c)]).lower().strip()
+    text = unicodedata.normalize("NFKD", str(text))
+    clean = "".join(c for c in text if not unicodedata.combining(c)).lower()
+    clean = re.sub(r"[^a-z0-9\s]", " ", clean)
+    return " ".join(clean.split())
 
 
-def pos_compatible(fb_pos, s_pos):
-    """Verifica se as posições do FBref e SofaScore são compatíveis usando conjuntos."""
-    if not fb_pos or not s_pos:
+@lru_cache(maxsize=4096)
+def canonical_club(team_name) -> str:
+    """Normaliza nomes de clubes entre PT/EN/ES/DE/FR para comparação robusta."""
+    raw = normalize(team_name)
+    if not raw:
+        return ""
+    for k, v in CLUB_SYNONYMS.items():
+        if raw == k:
+            raw = v
+            break
+    tokens = [t for t in raw.split() if t not in CLUB_STOPWORDS]
+    joined = " ".join(tokens) if tokens else raw
+    return CLUB_SYNONYMS.get(joined, joined)
+
+
+@lru_cache(maxsize=16384)
+def clubs_match(t1, t2) -> bool:
+    c1, c2 = canonical_club(t1), canonical_club(t2)
+    if not c1 or not c2:
+        return False
+    if c1 == c2 or c1 in c2 or c2 in c1:
         return True
-    fb_pos, s_pos = str(fb_pos).upper(), str(s_pos).upper()
-    
-    fb_cats = set()
-    if 'GK' in fb_pos or fb_pos == 'G':
-        fb_cats.add('GK')
-    if 'DF' in fb_pos or 'CB' in fb_pos or 'LB' in fb_pos or 'RB' in fb_pos or 'FB' in fb_pos or fb_pos == 'D':
-        fb_cats.add('DEF')
-    if 'MF' in fb_pos or 'DM' in fb_pos or 'CM' in fb_pos or 'AM' in fb_pos or fb_pos == 'M':
-        fb_cats.add('MID')
-    if 'FW' in fb_pos or 'ST' in fb_pos or 'CF' in fb_pos or 'LW' in fb_pos or 'RW' in fb_pos or fb_pos == 'F':
-        fb_cats.add('FWD')
+    s1, s2 = set(c1.split()), set(c2.split())
+    # Evita colisão entre Manchester City e Manchester United ou Los Angeles FC e LA Galaxy
+    distinct_modifiers = {"city", "united", "galaxy", "real", "atletico", "inter", "milan"}
+    if (s1 ^ s2) & distinct_modifiers and len(s1 & s2) <= 1:
+        return False
+    return bool(s1 & s2) and SequenceMatcher(None, c1, c2).ratio() >= 0.72
 
-    s_cats = set()
-    if 'GK' in s_pos or s_pos == 'G':
-        s_cats.add('GK')
-    if 'DF' in s_pos or 'CB' in s_pos or 'LB' in s_pos or 'RB' in s_pos or 'FB' in s_pos or s_pos == 'D':
-        s_cats.add('DEF')
-    if 'MF' in s_pos or 'DM' in s_pos or 'CM' in s_pos or 'AM' in s_pos or s_pos == 'M':
-        s_cats.add('MID')
-    if 'FW' in s_pos or 'ST' in s_pos or 'CF' in s_pos or 'LW' in s_pos or 'RW' in s_pos or s_pos == 'F':
-        s_cats.add('FWD')
 
-    return bool(fb_cats & s_cats)
+@lru_cache(maxsize=4096)
+def pos_compatible(pos1, pos2) -> bool:
+    """Verifica compatibilidade posicional multilíngue (PT/EN) via papéis táticos e macro-categorias."""
+    if not pos1 or not pos2:
+        return True
+    role1, cat1 = classify_position(str(pos1))
+    role2, cat2 = classify_position(str(pos2))
+    # Goleiro nunca é compatível com jogador de linha
+    if "GK" in (cat1, cat2):
+        return cat1 == cat2
+    if cat1 == cat2:
+        return True
+    # Alas / Laterais ofensivos (3-5-2 / 3-4-3) frequentemente alternam entre FB (DEF) e ML/MR/WNG (ATT)
+    if {role1, role2} == {"FB", "WNG"}:
+        return True
+    # Pontas/Meias ofensivos transitam entre MID e ATT; Alas/Volantes transitam entre DEF e MID
+    adjacent = {("MID", "ATT"), ("ATT", "MID"), ("DEF", "MID"), ("MID", "DEF")}
+    return (cat1, cat2) in adjacent
+
+
+@lru_cache(maxsize=4096)
+def _parse_iso_date(val) -> Optional[dt.date]:
+    if not val or str(val).strip().lower() in ("none", "nan", ""):
+        return None
+    try:
+        return dt.date.fromisoformat(str(val).strip()[:10])
+    except ValueError:
+        return None
+
+
+def dates_compatible(d1, d2) -> Tuple[bool, bool]:
+    """
+    Valida compatibilidade entre duas datas de nascimento.
+    Retorna (is_compatible, is_strong_match):
+    - Hard Veto (False, False) se ambas existirem e pertencerem claramente a atletas distintos.
+    - Strong Match (True, True) para data idêntica ou inversão DD/MM vs MM/DD no mesmo ano.
+    """
+    dt1, dt2 = _parse_iso_date(d1), _parse_iso_date(d2)
+    if not dt1 or not dt2:
+        return True, False
+    if dt1 == dt2:
+        return True, True
+    # Inversão clássica DD/MM vs MM/DD entre portais internacionais (ex: 1992-12-03 vs 1992-03-12)
+    if dt1.year == dt2.year and dt1.month == dt2.day and dt1.day == dt2.month:
+        return True, True
+    # Diferença de fuso/registro de até 5 dias (ex: 1994-09-30 vs 1994-10-01)
+    if abs((dt1 - dt2).days) <= 5:
+        return True, False
+    # Erro de digitação de 1 campo dentro do mesmo ano
+    if dt1.year == dt2.year and (dt1.month == dt2.month or dt1.day == dt2.day):
+        return True, False
+    # Erro de 1 ano com mesmo dia e mês exatos (ex: 2006-05-08 vs 2007-05-08)
+    if abs(dt1.year - dt2.year) == 1 and dt1.month == dt2.month and dt1.day == dt2.day:
+        return True, False
+    return False, False
+
+
+def names_similarity(n1: str, n2: str) -> float:
+    """Pontua similaridade entre nomes esportivos brasileiros (apelido vs nome composto)."""
+    a, b = normalize(n1), normalize(n2)
+    if not a or not b:
+        return 0.0
+    if a == b:
+        return 1.0
+    ta, tb = a.split(), b.split()
+    # Um nome é prefixo/subconjunto de tokens do outro (ex: "Pedro" vs "Pedro Guilherme", "Gabriel" vs "Gabriel Magalhaes", "Bremer" vs "Gleison Bremer")
+    if set(ta).issubset(set(tb)) or set(tb).issubset(set(ta)):
+        shortest = min(len(a), len(b))
+        if shortest >= 4:
+            return 0.92 if ta[0] == tb[0] or ta[-1] == tb[-1] else 0.86
+    # Primeiro nome igual + algum sobrenome/inicial compatível
+    if ta[0] == tb[0] and len(ta[0]) >= 4:
+        return max(0.78, SequenceMatcher(None, a, b).ratio())
+    return SequenceMatcher(None, a, b).ratio()
+
+
+def ensure_mapping_schema(cursor: sqlite3.Cursor):
+    """Garante que player_mapping suporta sofascore_id como fonte primária (fbref_db_id opcional)."""
+    cols = cursor.execute("PRAGMA table_info(player_mapping)").fetchall()
+    col_names = [c[1] for c in cols]
+    fbref_pk = any(c[1] == "fbref_db_id" and c[5] == 1 for c in cols)
+    if "id" not in col_names or fbref_pk:
+        cursor.execute("DROP TABLE IF EXISTS player_mapping")
+        cursor.execute("""
+            CREATE TABLE player_mapping (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sofascore_id INTEGER UNIQUE REFERENCES sofascore_players(id),
+                fbref_db_id INTEGER UNIQUE REFERENCES fbref_players(id),
+                transfermarkt_id INTEGER UNIQUE REFERENCES transfermarkt_players(id),
+                whoscored_id INTEGER UNIQUE REFERENCES whoscored_players(id),
+                merged_name VARCHAR
+            )
+        """)
 
 
 def match_players():
-    init_db()  # garante tabelas (inclui player_mapping com constraint única) e views
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+    ensure_mapping_schema(cursor)
+    conn.commit()
+    conn.close()
 
-    # Limpa mapeamentos antigos se o script for rodado novamente
-    cursor.execute('DELETE FROM player_mapping')
+    init_db()  # Recria views apontando para o schema atualizado
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM player_mapping")
 
-    print("[*] Lendo bases do FBref e Sofascore...")
+    print("[*] Carregando registros das 4 fontes (SofaScore como Fonte Primária)...")
 
-    # Busca todos os jogadores do FBref com sua posição e o clube mais recente
-    try:
-        query_fbref = """
-        SELECT p.id, p.name, p.primary_position,
+    # 1. SofaScore (Fonte Primária)
+    cursor.execute("""
+        SELECT sp.id, sp.name,
+               COALESCE(
+                   (SELECT spp.position FROM sofascore_player_positions spp WHERE spp.player_id = sp.id ORDER BY spp.ordinal ASC LIMIT 1),
+                   sp.position
+               ) AS pos,
+               sp.current_team, sp.nationality, sp.footed, sp.height, sp.weight
+        FROM sofascore_players sp
+    """)
+    sofa_players = cursor.fetchall()
+
+    # 2. FBref
+    cursor.execute("""
+        SELECT p.id, p.name, p.primary_position, p.birth_date,
                COALESCE(
                    (SELECT squad FROM fbref_outfield_stats WHERE player_id = p.id AND is_national_team = 0 ORDER BY season DESC LIMIT 1),
                    (SELECT squad FROM fbref_keeper_stats WHERE player_id = p.id AND is_national_team = 0 ORDER BY season DESC LIMIT 1)
-               ) as team
+               ) AS team
         FROM fbref_players p
-        """
-        cursor.execute(query_fbref)
-        fbref_players = cursor.fetchall()
-    except sqlite3.OperationalError as e:
-        print(f"[!] Erro ao acessar o banco do FBref: {e}")
-        conn.close()
-        return
-
-    # Busca todos os jogadores do Sofascore
-    try:
-        cursor.execute("SELECT id, name, position, current_team, nationality, footed, height, weight FROM sofascore_players")
-        sofascore_players = cursor.fetchall()
-    except sqlite3.OperationalError as e:
-        print(f"[!] Erro ao acessar a tabela do Sofascore: {e}")
-        conn.close()
-        return
-
-    # Agrupa Sofascore por nome normalizado
-    sofa_by_norm_name = defaultdict(list)
-    sofa_player_dict = {}
-    for row in sofascore_players:
-        s_id, s_name, s_pos, s_team, s_nat, s_foot, s_h, s_w = row
-        sofa_by_norm_name[normalize(s_name)].append(row)
-        sofa_player_dict[s_id] = row
-
-    matched_sofa_ids = set()
-    matches = []
-
-    print("[*] Executando algoritmo de cruzamento (Entity Resolution 1-para-1 com pontuação de candidatos)...")
-
-    # Passagem 1: Match Exato do Nome Normalizado + Seleção do Melhor Candidato por Clube/Posição
-    for fb_id, fb_name, fb_pos, fb_team in fbref_players:
-        norm_fb = normalize(fb_name)
-        candidates = sofa_by_norm_name.get(norm_fb, [])
-        if not candidates:
-            continue
-
-        norm_fb_team = normalize(fb_team)
-
-        best_cand = None
-        best_score = -1
-
-        for cand in candidates:
-            if cand[0] in matched_sofa_ids:
-                continue
-
-            cand_team = normalize(cand[3])
-            team_m = bool(norm_fb_team and cand_team and (norm_fb_team in cand_team or cand_team in norm_fb_team))
-            pos_ok = pos_compatible(fb_pos, cand[2])
-
-            score = 0
-            if team_m and pos_ok:
-                score = 30
-            elif team_m:
-                score = 20
-            elif pos_ok and not norm_fb_team:
-                score = 15
-            elif pos_ok and len(candidates) == 1:
-                score = 10
-            elif pos_ok:
-                score = 5
-
-            if score > best_score:
-                best_score = score
-                best_cand = cand
-
-        if best_cand and best_score >= 10:
-            matched_sofa_ids.add(best_cand[0])
-            matches.append((fb_id, best_cand[0], fb_name))
-
-    # Passagem 2: Match Parcial com validação estrita de Clube E Posição
-    already_matched_fb = {m[0] for m in matches}
-    for fb_id, fb_name, fb_pos, fb_team in fbref_players:
-        if fb_id in already_matched_fb:
-            continue
-        norm_fb = normalize(fb_name)
-        norm_fb_team = normalize(fb_team)
-        if not norm_fb_team:
-            continue
-
-        for s_id, s_name, s_pos, s_team, *_ in sofascore_players:
-            if s_id in matched_sofa_ids:
-                continue
-            norm_s_name = normalize(s_name)
-            norm_s_team = normalize(s_team)
-
-            # Substring de nome com comprimento mínimo >= 5 para evitar falsos positivos
-            name_match = (norm_fb in norm_s_name or norm_s_name in norm_fb) and len(min(norm_fb, norm_s_name, key=len)) >= 5
-            team_match = (norm_fb_team in norm_s_team or norm_s_team in norm_fb_team) if norm_s_team else False
-            pos_ok = pos_compatible(fb_pos, s_pos)
-
-            if name_match and team_match and pos_ok:
-                matched_sofa_ids.add(s_id)
-                matches.append((fb_id, s_id, fb_name))
-                break
-
-    # Persiste os mapeamentos 1-para-1 na tabela player_mapping
-    for fb_id, s_id, merged_name in matches:
-        cursor.execute(
-            'INSERT INTO player_mapping (fbref_db_id, sofascore_id, merged_name) VALUES (?, ?, ?)',
-            (fb_id, s_id, merged_name)
-        )
-
-    # ---------------------------------------------------------------------------------
-    # REGRA DE NEGÓCIO: nationality, footed, height, weight
-    # Se o Sofascore já possui o dado coletado (não nulo/não vazio), o FBref NÃO persiste.
-    # Se o Sofascore tiver null/None, o dado do FBref é mantido como fallback.
-    # ---------------------------------------------------------------------------------
-    cleared_demographics = 0
-    for fb_id, s_id, _ in matches:
-        s_row = sofa_player_dict.get(s_id)
-        if not s_row:
-            continue
-        _, _, _, _, s_nat, s_foot, s_h, s_w = s_row
-
-        updates = []
-        params = []
-        if s_nat and s_nat.strip() and s_nat.lower() != 'none':
-            updates.append("nationality = NULL")
-        if s_foot and s_foot.strip() and s_foot.lower() != 'none':
-            updates.append("footed = NULL")
-        if s_h is not None:
-            updates.append("height = NULL")
-        if s_w is not None:
-            updates.append("weight = NULL")
-
-        if updates:
-            sql = f"UPDATE fbref_players SET {', '.join(updates)} WHERE id = ?"
-            params.append(fb_id)
-            cursor.execute(sql, tuple(params))
-            cleared_demographics += 1
-
-    # ---------------------------------------------------------------------------------
-    # ETAPA 3: CRUZAMENTO COM TRANSFERMARKT (Valor de Mercado)
-    # ---------------------------------------------------------------------------------
-    print("[*] Cruzando com base de dados do Transfermarkt...")
-    try:
-        cursor.execute("SELECT id, name, position, current_club, birth_date FROM transfermarkt_players")
-        tm_players = cursor.fetchall()
-    except sqlite3.OperationalError:
-        tm_players = []
-
-    tm_by_norm_name = defaultdict(list)
-    for p in tm_players:
-        tm_by_norm_name[normalize(p[1])].append(p)
-
-    matched_tm_ids = set()
-    tm_matches = 0
-
-    cursor.execute("""
-        SELECT m.fbref_db_id, m.merged_name,
-               fp.primary_position,
-               sp.position, sp.current_team
-        FROM player_mapping m
-        LEFT JOIN fbref_players fp ON fp.id = m.fbref_db_id
-        LEFT JOIN sofascore_players sp ON sp.id = m.sofascore_id
     """)
-    current_mappings = cursor.fetchall()
+    fbref_players = cursor.fetchall()
 
-    for fb_id, m_name, fb_pos, sofa_pos, sofa_team in current_mappings:
-        norm_name = normalize(m_name)
-        candidates = tm_by_norm_name.get(norm_name, [])
-        if not candidates:
-            continue
+    # 3. Transfermarkt
+    cursor.execute("SELECT id, name, position, current_club, birth_date FROM transfermarkt_players")
+    tm_players = cursor.fetchall()
 
-        best_cand = None
-        best_score = -1
-        norm_sofa_team = normalize(sofa_team)
-
-        for cand in candidates:
-            if cand[0] in matched_tm_ids:
-                continue
-            c_id, c_name, c_pos, c_club, c_birth = cand
-            norm_club = normalize(c_club)
-
-            team_m = bool(norm_sofa_team and norm_club and (norm_sofa_team in norm_club or norm_club in norm_sofa_team))
-            pos_ok = pos_compatible(fb_pos or sofa_pos, c_pos)
-
-            score = 0
-            if team_m and pos_ok:
-                score = 30
-            elif team_m:
-                score = 20
-            elif pos_ok and len(candidates) == 1:
-                score = 10
-            elif pos_ok:
-                score = 5
-
-            if score > best_score:
-                best_score = score
-                best_cand = cand
-
-        if best_cand and best_score >= 10:
-            matched_tm_ids.add(best_cand[0])
-            cursor.execute(
-                "UPDATE player_mapping SET transfermarkt_id = ? WHERE fbref_db_id = ?",
-                (best_cand[0], fb_id)
-            )
-            tm_matches += 1
-
-    # Pass 2: Match Parcial com validação estrita de Clube e Posição
-    for fb_id, m_name, fb_pos, sofa_pos, sofa_team in current_mappings:
-        cursor.execute("SELECT transfermarkt_id FROM player_mapping WHERE fbref_db_id = ?", (fb_id,))
-        curr = cursor.fetchone()
-        if curr and curr[0] is not None:
-            continue
-
-        norm_name = normalize(m_name)
-        norm_sofa_team = normalize(sofa_team)
-        if not norm_sofa_team:
-            continue
-
-        for cand in tm_players:
-            if cand[0] in matched_tm_ids:
-                continue
-            c_id, c_name, c_pos, c_club, _ = cand
-            norm_c_name = normalize(c_name)
-            norm_c_club = normalize(c_club)
-
-            name_m = (norm_name in norm_c_name or norm_c_name in norm_name) and len(min(norm_name, norm_c_name, key=len)) >= 5
-            team_m = (norm_sofa_team in norm_c_club or norm_c_club in norm_sofa_team)
-            pos_ok = pos_compatible(fb_pos or sofa_pos, c_pos)
-
-            if name_m and team_m and pos_ok:
-                matched_tm_ids.add(c_id)
-                cursor.execute(
-                    "UPDATE player_mapping SET transfermarkt_id = ? WHERE fbref_db_id = ?",
-                    (c_id, fb_id)
-                )
-                tm_matches += 1
-                break
-
-    # =========================================================================
-    # Etapa 3: Vincular Jogadores do WhoScored à Tabela Gold
-    # =========================================================================
-    print("[*] Vinculando jogadores do WhoScored à Tabela Gold...")
-    cursor.execute("SELECT id, name, position, team_name, age FROM whoscored_players")
+    # 4. WhoScored
+    cursor.execute("SELECT id, name, full_name, position, COALESCE(team_name, current_team), birth_date FROM whoscored_players")
     ws_players = cursor.fetchall()
 
-    ws_by_norm_name = defaultdict(list)
-    for p in ws_players:
-        ws_by_norm_name[normalize(p[1])].append(p)
+    # Espinha dorsal: todos os atletas do SofaScore
+    records = {}
+    for s_id, s_name, s_pos, s_team, s_nat, s_foot, s_h, s_w in sofa_players:
+        records[s_id] = {
+            "sofascore_id": s_id,
+            "name": s_name,
+            "pos": s_pos,
+            "team": s_team,
+            "birth_date": None,
+            "fbref_db_id": None,
+            "transfermarkt_id": None,
+            "whoscored_id": None,
+            "demographics": (s_nat, s_foot, s_h, s_w),
+        }
 
-    matched_ws_ids = set()
+    # -------------------------------------------------------------------------
+    # ETAPA 1: SOFASCORE <-> FBREF (1-para-1 por maior score global)
+    # -------------------------------------------------------------------------
+    print("[*] Etapa 1: Vinculando FBref à base primária SofaScore...")
+    pair_candidates = []
+    for s_id, rec in records.items():
+        for fb_id, fb_name, fb_pos, fb_birth, fb_team in fbref_players:
+            if not pos_compatible(rec["pos"], fb_pos):
+                continue
+            nsim = names_similarity(rec["name"], fb_name)
+            if nsim < 0.74:
+                continue
+            t_ok = clubs_match(rec["team"], fb_team)
+            score = nsim * 100.0 + (35.0 if t_ok else 0.0)
+            # Exige clube compatível quando o nome não é idêntico (evita homônimos como Marquinhos/Matheus Cunha)
+            if t_ok or nsim >= 0.99:
+                pair_candidates.append((score, s_id, fb_id, fb_birth))
+
+    pair_candidates.sort(key=lambda x: x[0], reverse=True)
+    used_sofa, used_fb = set(), set()
+    fb_matches = 0
+    for score, s_id, fb_id, fb_birth in pair_candidates:
+        if s_id in used_sofa or fb_id in used_fb:
+            continue
+        # Se nome é idêntico mas há homônimos e clubes não batem, exige score >= 105
+        if score < 105.0:
+            # Verifica se o nome tem homônimo no SofaScore
+            norm_n = normalize(records[s_id]["name"])
+            homonyms = sum(1 for r in records.values() if normalize(r["name"]) == norm_n)
+            if homonyms > 1:
+                continue
+        used_sofa.add(s_id)
+        used_fb.add(fb_id)
+        records[s_id]["fbref_db_id"] = fb_id
+        if fb_birth and fb_birth != "None":
+            records[s_id]["birth_date"] = fb_birth
+        fb_matches += 1
+
+    # -------------------------------------------------------------------------
+    # ETAPA 2: VINCULAÇÃO COM TRANSFERMARKT (usa birth_date + clube + nome)
+    # -------------------------------------------------------------------------
+    print("[*] Etapa 2: Vinculando Transfermarkt (Valuation & Data de Nascimento)...")
+    tm_candidates = []
+    for s_id, rec in records.items():
+        for tm_id, tm_name, tm_pos, tm_club, tm_birth in tm_players:
+            if not pos_compatible(rec["pos"], tm_pos):
+                continue
+            b_compat, b_strong = dates_compatible(rec["birth_date"], tm_birth)
+            if not b_compat:
+                continue
+            nsim = names_similarity(rec["name"], tm_name)
+            t_ok = clubs_match(rec["team"], tm_club)
+
+            if b_strong and (nsim >= 0.60 or t_ok):
+                score = 160.0 + nsim * 50.0 + (25.0 if t_ok else 0.0)
+                tm_candidates.append((score, s_id, tm_id, tm_birth))
+            elif t_ok and nsim >= 0.78:
+                score = 100.0 + nsim * 50.0
+                tm_candidates.append((score, s_id, tm_id, tm_birth))
+            elif nsim >= 0.99 and not (rec["birth_date"] and tm_birth):
+                norm_n = normalize(rec["name"])
+                homonyms = sum(1 for r in records.values() if normalize(r["name"]) == norm_n)
+                if homonyms == 1:
+                    tm_candidates.append((95.0, s_id, tm_id, tm_birth))
+
+    tm_candidates.sort(key=lambda x: x[0], reverse=True)
+    used_sofa_tm, used_tm = set(), set()
+    tm_matches = 0
+    for score, s_id, tm_id, tm_birth in tm_candidates:
+        if s_id in used_sofa_tm or tm_id in used_tm:
+            continue
+        used_sofa_tm.add(s_id)
+        used_tm.add(tm_id)
+        records[s_id]["transfermarkt_id"] = tm_id
+        if not records[s_id]["birth_date"] and tm_birth:
+            records[s_id]["birth_date"] = tm_birth
+        tm_matches += 1
+
+    # Segunda passagem FBref usando birth_date recém-descoberto via Transfermarkt!
+    for s_id, rec in records.items():
+        if rec["fbref_db_id"] is not None or not rec["birth_date"]:
+            continue
+        for fb_id, fb_name, fb_pos, fb_birth, fb_team in fbref_players:
+            if fb_id in used_fb or not fb_birth:
+                continue
+            b_compat, b_strong = dates_compatible(rec["birth_date"], fb_birth)
+            if not b_strong:
+                continue
+            if pos_compatible(rec["pos"], fb_pos) and (names_similarity(rec["name"], fb_name) >= 0.55 or clubs_match(rec["team"], fb_team)):
+                used_fb.add(fb_id)
+                rec["fbref_db_id"] = fb_id
+                fb_matches += 1
+                break
+
+    # -------------------------------------------------------------------------
+    # ETAPA 3: VINCULAÇÃO COM WHOSCORED (usa birth_date + full_name + clube)
+    # -------------------------------------------------------------------------
+    print("[*] Etapa 3: Vinculando WhoScored (Características & Histórico)...")
+    ws_candidates = []
+    for s_id, rec in records.items():
+        for ws_id, ws_name, ws_full, ws_pos, ws_team, ws_birth in ws_players:
+            if not pos_compatible(rec["pos"], ws_pos):
+                continue
+            b_compat, b_strong = dates_compatible(rec["birth_date"], ws_birth)
+            if not b_compat:
+                continue
+            nsim = max(names_similarity(rec["name"], ws_name), names_similarity(rec["name"], ws_full or ""))
+            t_ok = clubs_match(rec["team"], ws_team)
+
+            if b_strong and (nsim >= 0.55 or t_ok):
+                score = 160.0 + nsim * 50.0 + (25.0 if t_ok else 0.0)
+                ws_candidates.append((score, s_id, ws_id))
+            elif t_ok and nsim >= 0.78:
+                score = 100.0 + nsim * 50.0
+                ws_candidates.append((score, s_id, ws_id))
+            elif nsim >= 0.99 and not (rec["birth_date"] and ws_birth):
+                norm_n = normalize(rec["name"])
+                homonyms = sum(1 for r in records.values() if normalize(r["name"]) == norm_n)
+                if homonyms == 1:
+                    ws_candidates.append((95.0, s_id, ws_id))
+
+    ws_candidates.sort(key=lambda x: x[0], reverse=True)
+    used_sofa_ws, used_ws = set(), set()
     ws_matches = 0
-
-    # Pass 1: Nome exato normalizado
-    for fb_id, m_name, fb_pos, sofa_pos, sofa_team in current_mappings:
-        norm_name = normalize(m_name)
-        cands = ws_by_norm_name.get(norm_name, [])
-        if not cands:
+    for score, s_id, ws_id in ws_candidates:
+        if s_id in used_sofa_ws or ws_id in used_ws:
             continue
+        used_sofa_ws.add(s_id)
+        used_ws.add(ws_id)
+        records[s_id]["whoscored_id"] = ws_id
+        ws_matches += 1
 
-        norm_team = normalize(sofa_team)
-        best_cand = None
-        for cand in cands:
-            if cand[0] in matched_ws_ids:
-                continue
-            c_id, c_name, c_pos, c_team, c_age = cand
-            norm_c_team = normalize(c_team)
-            team_m = bool(norm_team and norm_c_team and (norm_team in norm_c_team or norm_c_team in norm_team))
-            if team_m or len(cands) == 1:
-                best_cand = cand
-                break
+    # Persiste todos os atletas na player_mapping
+    cleared_demographics = 0
+    for s_id, rec in records.items():
+        cursor.execute(
+            """
+            INSERT INTO player_mapping (sofascore_id, fbref_db_id, transfermarkt_id, whoscored_id, merged_name)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (rec["sofascore_id"], rec["fbref_db_id"], rec["transfermarkt_id"], rec["whoscored_id"], rec["name"]),
+        )
 
-        if best_cand:
-            matched_ws_ids.add(best_cand[0])
-            cursor.execute(
-                "UPDATE player_mapping SET whoscored_id = ? WHERE fbref_db_id = ?",
-                (best_cand[0], fb_id)
-            )
-            ws_matches += 1
-
-    # Pass 2: Nome parcial + Clube
-    for fb_id, m_name, fb_pos, sofa_pos, sofa_team in current_mappings:
-        cursor.execute("SELECT whoscored_id FROM player_mapping WHERE fbref_db_id = ?", (fb_id,))
-        curr = cursor.fetchone()
-        if curr and curr[0] is not None:
-            continue
-
-        norm_name = normalize(m_name)
-        norm_team = normalize(sofa_team)
-        if not norm_team:
-            continue
-
-        for cand in ws_players:
-            if cand[0] in matched_ws_ids:
-                continue
-            c_id, c_name, c_pos, c_team, c_age = cand
-            norm_c_name = normalize(c_name)
-            norm_c_team = normalize(c_team)
-
-            name_m = (norm_name in norm_c_name or norm_c_name in norm_name) and len(min(norm_name, norm_c_name, key=len)) >= 5
-            team_m = (norm_team in norm_c_team or norm_c_team in norm_team)
-            if name_m and team_m:
-                matched_ws_ids.add(c_id)
-                cursor.execute(
-                    "UPDATE player_mapping SET whoscored_id = ? WHERE fbref_db_id = ?",
-                    (c_id, fb_id)
-                )
-                ws_matches += 1
-                break
+        # Regra de fallback demográfico: SofaScore primário -> limpa redundância no FBref se SofaScore já tiver
+        if rec["fbref_db_id"] is not None:
+            s_nat, s_foot, s_h, s_w = rec["demographics"]
+            updates = []
+            if s_nat and str(s_nat).strip() and str(s_nat).lower() != "none":
+                updates.append("nationality = NULL")
+            if s_foot and str(s_foot).strip() and str(s_foot).lower() != "none":
+                updates.append("footed = NULL")
+            if s_h is not None:
+                updates.append("height = NULL")
+            if s_w is not None:
+                updates.append("weight = NULL")
+            if updates:
+                cursor.execute(f"UPDATE fbref_players SET {', '.join(updates)} WHERE id = ?", (rec["fbref_db_id"],))
+                cleared_demographics += 1
 
     conn.commit()
     conn.close()
 
-    total_fbref = len(fbref_players)
-    unmatched = total_fbref - len(matches)
-    print(f"\n[+] Tabela 'player_mapping' atualizada com sucesso!")
-    print(f"    -> {len(matches)} jogadores FBref <-> Sofascore mapeados 1-para-1 sem colisões.")
-    print(f"    -> {tm_matches} jogadores do Transfermarkt vinculados à Tabela Gold.")
-    print(f"    -> {ws_matches} jogadores do WhoScored vinculados à Tabela Gold.")
-    print(f"    -> {unmatched} jogadores do FBref não encontrados no Sofascore.")
-    print(f"    -> Regra de fallback demográfico aplicada: {cleared_demographics} jogadores processados.")
+    print(f"\n[+] Tabela 'player_mapping' (Camada Gold) atualizada com sucesso!")
+    print(f"    -> {len(records)} atletas brasileiros na base Gold (SofaScore Primária: 100%).")
+    print(f"    -> {fb_matches}/{len(fbref_players)} atletas do FBref vinculados 1-para-1 ({fb_matches*100/max(len(fbref_players),1):.1f}%).")
+    print(f"    -> {tm_matches}/{len(tm_players)} atletas do Transfermarkt vinculados 1-para-1 ({tm_matches*100/max(len(tm_players),1):.1f}%).")
+    print(f"    -> {ws_matches}/{len(ws_players)} atletas do WhoScored vinculados 1-para-1 ({ws_matches*100/max(len(ws_players),1):.1f}%).")
+    print(f"    -> Regra de governança demográfica aplicada em {cleared_demographics} registros do FBref.")
 
 
 if __name__ == "__main__":

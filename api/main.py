@@ -10,6 +10,7 @@ de jogadores brasileiros nas 11 principais ligas globais de futebol:
 - /analytics/rankings: Rankings e líderes por métrica volumétrica e P90.
 - /analytics/compare: Comparativo lado a lado de múltiplos atletas para scout comparado.
 - /metadata: Filtros e opções dinâmicas para preenchimento de UIs e dashboards.
+- /explorer/*: Explorador configurável — faixas (mín–máx) por estatística, recortes, percentis, ficha e CSV.
 """
 import json
 import os
@@ -28,13 +29,17 @@ if BASE_DIR not in sys.path:
     sys.path.append(BASE_DIR)
 
 from analytics_engine import ScoutAnalyticsEngine, RADAR_METRICS_BY_ROLE
+from api.explorer import router as explorer_router
 from core.settings import DB_PATH
+from explorer_engine import ExplorerError, get_engine as get_explorer_engine
 
 app = FastAPI(
     title="⚽ Scout Data Intelligence API",
-    version="2.0",
+    version="2.1",
     description="API RESTful de Scouting Esportivo de Alto Desempenho para Atletas Brasileiros",
 )
+
+app.include_router(explorer_router)
 
 # Libera CORS para frontends (Streamlit, React, Vite, Next.js)
 app.add_middleware(
@@ -111,7 +116,7 @@ def root():
     return {
         "status": "online",
         "service": "Scout Data Intelligence API",
-        "version": "2.0",
+        "version": "2.1",
         "total_players_tracked": total_mapped,
         "docs_url": "/docs",
     }
@@ -283,16 +288,19 @@ def get_player_profile(player_id: str):
 @app.get("/players/{player_id}/dossier", tags=["Analytics & Radar"])
 def get_player_dossier(
     player_id: str,
-    season: Optional[str] = Query(None, description="Temporada analítica (ex: 2023, 2024, 23/24)"),
-    min_minutes: int = Query(450, ge=0, description="Minutos mínimos jogados na amostra"),
+    season: Optional[str] = Query(None, description="Temporada analítica ('latest', 'all', '26/27', '2026', '25/26', '2025'...)"),
+    min_minutes: int = Query(450, ge=0, description="Minutos mínimos jogados no universo posicional de percentis"),
+    metrics: Optional[List[str]] = Query(None, description="Lista opcional de chaves das 141 estatísticas para os eixos do Radar"),
 ):
     """
-    Retorna o dossiê analítico do atleta com Radar Chart P90 e Percentis ranqueados dentro de seu papel tático.
+    Retorna o Raio-X & Radar completo do atleta com TODAS as 141 estatísticas agrupadas nas 12 categorias
+    (Total/Taxa, Por 90', Média da Função e Percentil Posicional), além dos eixos do Radar e atributos qualitativos.
     """
-    dossier = engine_analytics.get_player_dossier(
+    dossier = get_explorer_engine().dossier(
         player_identifier=player_id,
         season=season,
         min_minutes=min_minutes,
+        radar_metrics=metrics,
     )
     if not dossier:
         raise HTTPException(
@@ -305,19 +313,21 @@ def get_player_dossier(
 @app.get("/players/{player_id}/similar", tags=["Analytics & Radar"])
 def get_similar_players(
     player_id: str,
-    season: Optional[str] = Query(None, description="Temporada para cálculo da similaridade"),
+    season: Optional[str] = Query(None, description="Temporada para cálculo da similaridade ('latest', 'all', ou temporada específica)"),
     top_n: int = Query(5, ge=1, le=20, description="Quantidade de atletas similares a retornar"),
     min_minutes: int = Query(450, ge=0, description="Minutos mínimos jogados"),
+    metrics: Optional[List[str]] = Query(None, description="Lista opcional das 141 estatísticas para ponderar a similaridade"),
 ):
     """
     Identifica os atletas brasileiros mais similares na mesma função tática,
-    utilizando cálculo de proximidade no espaço vetorial de percentis do radar.
+    utilizando cálculo de proximidade euclidiana no espaço vetorial de percentis (padrão da função ou eixos customizados do radar).
     """
-    similars = engine_analytics.find_similar_players(
-        target_name_or_id=player_id,
+    similars = get_explorer_engine().similar(
+        player_identifier=player_id,
         season=season,
         top_n=top_n,
         min_minutes=min_minutes,
+        metrics=metrics,
     )
     return {
         "target_player": player_id,
@@ -328,62 +338,47 @@ def get_similar_players(
 
 @app.get("/analytics/rankings", tags=["Analytics & Radar"])
 def get_metric_rankings(
-    metric: str = Query("goals", description="Métrica para ranking (goals, xg, assists, xa, key_passes, tackles, etc.)"),
+    metric: str = Query("goals", description="Qualquer uma das 141 estatísticas do catálogo (ex: goals, expected_goals, assists, key_passes, tackles, saves_pct, top_speed, fbref_team_ppm...)"),
+    mode: str = Query("auto", pattern="^(auto|p90|total)$", description="Critério do ranking: 'auto' (p90 se aplicável), 'p90' (por 90 min) ou 'total' (valor agregado / taxa)"),
+    order: str = Query("desc", pattern="^(desc|asc)$", description="Direção: 'desc' (maiores) ou 'asc' (menores)"),
     role: Optional[str] = Query(None, description="Filtrar por função tática (ST, WNG, CM_AM, DM, FB, CB, GK)"),
-    season: Optional[str] = Query(None, description="Temporada analítica"),
-    min_minutes: int = Query(450, ge=0, description="Minutos mínimos jogados"),
-    limit: int = Query(20, ge=1, le=100, description="Quantidade de atletas no ranking"),
+    category: Optional[str] = Query(None, description="Filtrar por macro-categoria (ATT, MID, DEF, GK)"),
+    league: Optional[str] = Query(None, description="Filtrar por liga atual"),
+    season: Optional[str] = Query(None, description="Temporada ('latest', 'all', '26/27', '2026', '25/26', '2025'...)"),
+    competition: Optional[str] = Query(None, description="Filtrar por competição específica"),
+    min_minutes: int = Query(450, ge=0, description="Minutos mínimos jogados no recorte"),
+    limit: int = Query(20, ge=1, le=100, description="Quantidade de atletas no ranking (Top N)"),
 ):
     """
-    Retorna o ranking de líderes para uma métrica específica, ordenado tanto pelo valor P90 quanto bruto.
+    Retorna o ranking de líderes para qualquer uma das 141 estatísticas coletadas,
+    com suporte a ordenação Por 90' ou Total/Taxa e métricas de referência (benchmarks) por posição.
     """
-    df = engine_analytics.get_gold_dataset(season=season, min_minutes=min_minutes, scout_role=role)
-    if df.empty:
-        return {"metric": metric, "total": 0, "rankings": []}
-
-    sort_col = f"{metric}_p90" if f"{metric}_p90" in df.columns else metric
-    if sort_col not in df.columns:
-        raise HTTPException(status_code=400, detail=f"Métrica '{metric}' não encontrada.")
-
-    ranked_df = df.sort_values(by=sort_col, ascending=False).head(limit)
-
-    results = []
-    for rank_pos, (_, r) in enumerate(ranked_df.iterrows(), 1):
-        raw_val = r.get(metric)
-        p90_val = r.get(f"{metric}_p90", raw_val)
-        pct_val = r.get(f"{metric}_pct")
-
-        results.append({
-            "rank": rank_pos,
-            "mapping_id": int(r['mapping_id']),
-            "name": str(r['player_name']),
-            "scout_role": str(r['scout_role']),
-            "current_team": str(r['current_team']),
-            "current_league": str(r['current_league']),
-            "minutes_played": int(r['minutes_played']),
-            "raw_value": round(float(raw_val), 2) if raw_val is not None and not pd.isna(raw_val) else None,
-            "p90_value": round(float(p90_val), 2) if p90_val is not None and not pd.isna(p90_val) else None,
-            "percentile": round(float(pct_val), 1) if pct_val is not None and not pd.isna(pct_val) else None,
-            "market_value_raw": str(r['market_value_raw']) if pd.notna(r['market_value_raw']) else "N/A",
-        })
-
-    return {
-        "metric": metric,
-        "scout_role": role,
-        "season": season,
-        "total": len(results),
-        "rankings": results,
-    }
+    try:
+        return get_explorer_engine().rankings(
+            metric=metric,
+            mode=mode,
+            order=order,
+            role=role,
+            category=category,
+            league=league,
+            season=season,
+            competition=competition,
+            min_minutes=min_minutes,
+            limit=limit,
+        )
+    except ExplorerError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.get("/analytics/compare", tags=["Analytics & Radar"])
 def compare_players(
     player_ids: List[int] = Query(..., description="Lista de mapping_ids para comparação lado a lado"),
-    season: Optional[str] = Query(None, description="Temporada analítica"),
+    season: Optional[str] = Query(None, description="Temporada analítica ('latest', 'all', ou temporada específica)"),
     min_minutes: int = Query(0, description="Minutos mínimos jogados"),
+    metrics: Optional[List[str]] = Query(None, description="Lista opcional das 143 estatísticas para comparar no radar"),
 ):
     """
-    Compara 2 ou mais jogadores lado a lado, devolvendo seus dossiês e métricas de radar sobrepostas.
+    Compara 2 ou mais jogadores lado a lado, devolvendo seus dossiês completos (143 estatísticas) e métricas de radar sobrepostas.
     """
     if len(player_ids) < 2:
         raise HTTPException(status_code=400, detail="Forneça ao menos 2 IDs de jogadores para comparação.")
@@ -391,8 +386,9 @@ def compare_players(
         raise HTTPException(status_code=400, detail="Comparação limitada a no máximo 6 jogadores simultâneos.")
 
     comparisons = []
+    eng = get_explorer_engine()
     for pid in player_ids:
-        dossier = engine_analytics.get_player_dossier(str(pid), season=season, min_minutes=min_minutes)
+        dossier = eng.dossier(str(pid), season=season, min_minutes=min_minutes, radar_metrics=metrics)
         if dossier:
             comparisons.append(dossier)
 
