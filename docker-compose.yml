@@ -1,0 +1,25 @@
+# Uso:
+#   1) cp .env.example .env   e preencha API_KEY / BASIC_AUTH_* / ALLOWED_ORIGINS
+#   2) docker compose up -d --build
+# A porta fica restrita ao localhost: publique via proxy reverso com HTTPS (Caddy/Nginx/Cloudflare Tunnel).
+services:
+  scout-api:
+    build: .
+    image: scout-data-intelligence:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      APP_ENV: production
+      DB_PATH: /data/scout.db
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./scout.db:/data/scout.db:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+

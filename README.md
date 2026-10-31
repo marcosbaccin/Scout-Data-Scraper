@@ -11,7 +11,7 @@ O sistema opera com um pipeline de dados convergente em 4 fontes complementares 
 ```mermaid
 flowchart TD
     subgraph Fontes_Scraping ["Camada de Extração (Scrapers)"]
-        SS["🟢 SofaScore<br/>(Fonte Primária: Métricas volumétricas & Ratings)"]
+        SS["🟢 SofaScore<br/>(Fonte Primária: Métricas volumétricas & físicas)"]
         FB["🔵 FBref<br/>(Exclusivas: PPM, On-Pitch Goals, Subs)"]
         TM["🔴 Transfermarkt<br/>(Exclusivas: Valor de Mercado & Nacionalidade)"]
         WS["🟠 WhoScored<br/>(Exclusivas: Pontos Fortes/Fracos, Estilos, Domínio Err., B. Enfiadas)"]
@@ -68,8 +68,9 @@ A coleta abrange exclusivamente atletas de **nacionalidade brasileira** pertence
 
 ### Regras de Negócio e Governança de Dados
 1. **Filtro Estrito de Nacionalidade**: Apenas atletas cuja nacionalidade primária (seleção elegível) seja o Brasil. Casos de dupla nacionalidade onde o atleta optou por outra seleção (ex: Matheus Nunes / Portugal no Manchester City) são descartados automaticamente na camada de ingestão.
-2. **SofaScore como Fonte Primária**: Todas as estatísticas cumulativas e volumétricas por jogo (passes certos, finalizações, interceptações, desarmes, xG, xA, rating) originam-se do SofaScore.
-3. **Métricas Sem Sobreposição (Exclusividade)**:
+2. **SofaScore como Fonte Primária**: Todas as estatísticas cumulativas e volumétricas por jogo (passes certos, finalizações, interceptações, desarmes, xG, xA) originam-se do SofaScore.
+3. **Apenas Métricas Objetivas (sem Ratings)**: Notas subjetivas de plataformas (rating SofaScore / WhoScored) **não são expostas** na API nem no dashboard. O sistema trabalha com 141 estatísticas objetivas de desempenho, tática e físico, e o frontend não menciona as fontes de origem.
+4. **Métricas Sem Sobreposição (Exclusividade)**:
    - **FBref**: Apenas dados não cobertos pelo Sofascore: PPM (*Points Per Match* quando o atleta esteve em campo), gols a favor/contra *on-pitch* (`onG`, `onGA`), substituições (`subs_in`, `subs_unused`) e métricas específicas de pênaltis para goleiros.
    - **Transfermarkt**: Valor de mercado monetário atual (`market_value_raw`), link do perfil e dados contratuais.
    - **WhoScored**: Características táticas qualitativas do time e do atleta (`strengths`, `weaknesses`, `style_of_play`), contagem de homem do jogo (`motm`), bolas enfiadas por jogo (`through_balls_per_game`), perdas de controle de bola (`dispossessed_per_game`) e toques mal-sucedidos (`unsuccessful_touches_per_game`).
@@ -82,15 +83,26 @@ A coleta abrange exclusivamente atletas de **nacionalidade brasileira** pertence
 Scout-Data-Scraper/
 │
 ├── api/                          # Camada de API RESTful
-│   └── main.py                   # FastAPI: endpoints de busca, filtros e percentis
+│   ├── main.py                   # FastAPI: endpoints de busca, dossiê, rankings, /health e dashboard
+│   └── explorer.py               # Router /explorer/*: schema, bounds, search, ficha e exportação CSV
 │
 ├── core/                         # Núcleo da arquitetura
 │   ├── browser.py                # Wrapper com stealth anti-bot e headers
 │   ├── database.py               # Configuração SQLAlchemy, engine e FKs SQLite
+│   ├── explorer_catalog.py       # Catálogo único das 141 estatísticas (12 categorias, perfis prontos)
 │   ├── models.py                 # Schemas ORM das 4 fontes e da player_mapping
+│   ├── security.py               # Autenticação, rate limit, anti-força-bruta, headers e CORS
+│   ├── seasons.py                # Normalização de temporadas e recortes
 │   ├── settings.py               # Variáveis de ambiente e caminhos centrais
 │   ├── sofascore_metrics.py      # Dicionário de normalização de métricas SofaScore
 │   └── views.py                  # DDL de Views SQL consolidadas (Gold Layer)
+│
+├── frontend/                     # Dashboard estático servido pela própria API
+│   ├── index.html
+│   ├── css/style.css
+│   └── js/                       # app.js (Raio-X, Radar, Rankings) e explorer.js (Explorador)
+│
+├── tests/                        # Testes automatizados (API, segurança, navegador e modo produção)
 │
 ├── pipelines/                    # Pipelines ETL especializados
 │   └── cleaner.py                # Processamento, desduplicação e carga do FBref
@@ -107,13 +119,17 @@ Scout-Data-Scraper/
 │   └── test_gold.py              # Teste de junção e integridade multi-fontes
 │
 ├── analytics_engine.py           # Motor estatístico P90 e percentis por posição
+├── explorer_engine.py            # Motor do Explorador: agregação (total, p90, percentil) e filtros
 ├── load_fbref.py                 # Loader do FBref para o scout.db
 ├── load_sofascore.py             # Loader do SofaScore para o scout.db
 ├── load_transfermarkt.py         # Loader do Transfermarkt para o scout.db
 ├── load_whoscored.py             # Loader do WhoScored para o scout.db
 ├── match_ids.py                  # Algoritmo de resolução de identidades (Entity Matching)
 ├── main.py                       # Orquestrador geral do pipeline
-├── requirements.txt              # Dependências Python do ecossistema
+├── requirements.txt              # Dependências completas (scraping + ETL + API)
+├── requirements-api.txt          # Dependências enxutas de runtime (imagem Docker)
+├── Dockerfile                    # Imagem de produção da API + dashboard
+├── docker-compose.yml            # Execução em produção (banco somente leitura, porta em localhost)
 ├── .env.example                  # Template de configuração de variáveis
 └── .gitignore                    # Regras de exclusão de dados e binários
 ```
@@ -156,9 +172,9 @@ Para comparações estatísticas justas, as nomenclaturas de posições das 4 fo
 ### 🏆 Camada Gold e Motor Analítico (`v_player_gold_analytics`)
 A View analítica consolida:
 1. **Perfil Unificado** (`v_player_profiles`): Dossiê cadastral, valor de mercado em euros (Transfermarkt), URLs de perfis e características qualitativas (WhoScored).
-2. **Métricas Primárias (SofaScore)**: Minutos jogados, Gols, Assistências, xG, xA, Finalizações, Passes Chave, Dribles Certos %, Duelos Ganhos %, Desarmes, Interceptações e Rating.
+2. **Métricas Primárias (SofaScore)**: Minutos jogados, Gols, Assistências, xG, xA, Finalizações, Passes Chave, Dribles Certos %, Duelos Ganhos %, Desarmes e Interceptações.
 3. **Métricas Exclusivas (FBref)**: Pontos por Partida (PPM), Saldo de Gols On-Pitch, Jogos Completos e Substituições.
-4. **Métricas Exclusivas (WhoScored)**: Homem do Jogo (MOTM), Nota WhoScored, Bolas Enfiadas por Jogo, Perda de Posse por Jogo e Domínios Errados por Jogo.
+4. **Métricas Exclusivas (WhoScored)**: Homem do Jogo (MOTM), Bolas Enfiadas por Jogo, Perda de Posse por Jogo e Domínios Errados por Jogo.
 5. **Cálculo P90 e Percentis por Posição**: Percentis calculados comparando apenas atletas que compartilham o mesmo `scout_role` com filtro de minutos mínimos (ex: $\ge 450$ min).
 6. **Similaridade de Atletas**: Motor vetorial de distância Euclidiana/Cosseno no espaço de percentis para encontrar os jogadores mais similares na base.
 
@@ -274,14 +290,71 @@ python main.py api --port 8000
 
 #### Endpoints Disponíveis na API:
 - `GET /`: Status da API e total de atletas monitorados.
+- `GET /health`: Liveness/readiness (público, sem dados sensíveis) para Docker e load balancers.
 - `GET /dashboard`: Interface web completa de scouting esportivo.
 - `GET /metadata`: Filtros dinâmicos (temporadas, ligas, clubes, funções táticas e macro-categorias).
 - `GET /players`: Listagem paginada com busca por nome, papel tático, liga, clube e faixa de valor de mercado.
 - `GET /players/{id}`: Dossiê cadastral detalhado com características qualitativas das 4 fontes.
-- `GET /players/{id}/dossier`: Dossiê analítico com Radar Chart P90 e percentis ranqueados dentro da posição.
+- `GET /players/{id}/dossier`: Dossiê analítico com as 141 estatísticas, Radar P90 (8 eixos por função, customizáveis) e percentis dentro da posição.
 - `GET /players/{id}/similar`: Atletas brasileiros mais similares na mesma função tática com score de proximidade (%).
-- `GET /analytics/rankings`: Tabela de líderes e ranking por qualquer métrica (valor bruto e P90).
+- `GET /analytics/rankings`: Tabela de líderes por qualquer uma das 141 estatísticas (valor bruto e P90).
 - `GET /analytics/compare`: Comparativo analítico lado a lado de múltiplos atletas.
+- `GET|POST /explorer/*`: Explorador configurável (`schema`, `players`, `bounds`, `search`, `sheet`, `export`), com faixas mín–máx por estatística em modo total, por 90' ou percentil.
+
+### 8. Testes Automatizados
+```powershell
+python tests/test_explorer_e2e.py      # API e catálogo (141 estatísticas, sem ratings)
+python tests/test_security.py          # Autenticação, rate limit, CORS e força bruta
+python tests/test_browser_ui.py        # Dashboard completo no Chromium headless (requer playwright)
+python tests/test_production_mode.py   # App real em APP_ENV=production, inclusive o dashboard com login
+```
+
+---
+
+## 🔐 Segurança e Deploy em Produção
+
+### Variáveis de ambiente de segurança
+Todas documentadas em [.env.example](.env.example).
+
+| Variável | Função |
+| :--- | :--- |
+| `APP_ENV` | `development` (padrão) ou `production`. |
+| `API_KEY` | Chave para scripts e integrações: `X-API-Key: <chave>` ou `Authorization: Bearer <chave>`. |
+| `BASIC_AUTH_USER` / `BASIC_AUTH_PASSWORD` | Login do dashboard: o navegador pergunta uma vez e reutiliza nas chamadas da página. |
+| `ALLOW_PUBLIC` | `true` publica sem login (somente rate limit). Só vale sem credenciais definidas. |
+| `ALLOWED_ORIGINS` | Origens do CORS, separadas por vírgula. Desnecessário se o dashboard é servido pela própria API. |
+| `RATE_LIMIT_PER_MIN` | Requisições por minuto por IP (padrão 300; `0` desliga). |
+| `DOCS_ENABLED` | Reativa `/docs`, `/redoc` e `/openapi.json` em produção. |
+| `TRUST_PROXY` | `true` apenas atrás de proxy reverso confiável que sobrescreve `X-Forwarded-For`. |
+
+Comportamento em `APP_ENV=production`:
+- **Fail-closed:** a API **não inicia** sem credenciais (ou `ALLOW_PUBLIC=true`) e exige segredos com 16+ caracteres.
+- `/docs`, `/redoc` e `/openapi.json` ficam desligados, e o CORS só libera o que estiver em `ALLOWED_ORIGINS`.
+- Bloqueio temporário (HTTP 429) após 10 credenciais erradas em 1 minuto por IP. Requisições **sem** credenciais (desafio do navegador) não contam.
+- Todas as respostas levam `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` e `Permissions-Policy`. O HSTS é enviado quando o proxy informa HTTPS.
+- Apenas `/health` é público.
+
+Gere segredos fortes com:
+```powershell
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+### Docker
+A imagem contém só a API e o dashboard (sem Selenium/Playwright). O `scout.db` é montado como volume **somente leitura**, pois o scraping e o ETL rodam fora do contêiner.
+
+```powershell
+copy .env.example .env      # defina APP_ENV=production e as credenciais
+docker compose up -d --build
+docker compose ps           # STATUS deve ficar "healthy"
+```
+
+- O dashboard fica em `http://127.0.0.1:8000/dashboard`. A porta é ligada só ao localhost: para expor na internet, use um proxy reverso com HTTPS (Caddy, Nginx) ou um Cloudflare Tunnel, e defina `TRUST_PROXY=true`.
+- O contêiner roda como usuário sem privilégios, com sistema de arquivos somente leitura e `cap_drop: ALL`.
+- `WEB_CONCURRENCY=1` por padrão. O rate limit é por processo, então mais workers multiplicam o limite efetivo, e cada um carrega o dataset na memória.
+- Para atualizar os dados: rode o pipeline (`scrape` ➔ `load` ➔ `match`) no host e reinicie o contêiner (`docker compose restart`).
+
+> [!IMPORTANT]
+> Os dados são obtidos por scraping de plataformas que restringem uso comercial e redistribuição em seus termos. Use em **ambiente interno**. Para publicar ao público, avalie dados licenciados ou abertos e faça revisão jurídica.
 
 ---
 
@@ -314,3 +387,15 @@ python main.py api --port 8000
 
 
 
+- [x] **Fase 6: Explorador Configurável & 141 Estatísticas Objetivas**
+  - [x] Catálogo único com 141 estatísticas em 12 categorias, sem ratings e sem menção às fontes no frontend.
+  - [x] Explorador com faixas mín–máx por estatística (total, por 90' e percentil), perfis prontos e exportação CSV.
+  - [x] Raio-X & Radar e Rankings & Líderes cobrindo todas as estatísticas, com eixos de radar customizáveis.
+- [x] **Fase 7: Segurança & Containerização**
+  - [x] Autenticação (API key / Basic Auth), rate limit, anti-força-bruta, headers de segurança e CORS restrito.
+  - [x] Modo `production` fail-closed, `/health` e documentação interativa desligada.
+  - [x] Dockerfile enxuto, `docker-compose.yml` e suíte de testes de segurança e de modo produção.
+- [ ] **Próximos passos (produção)**
+  - [ ] Pipeline agendado de atualização dos dados (o CAPTCHA do Transfermarkt ainda exige operador).
+  - [ ] CI (testes a cada push) e lockfile de dependências.
+  - [ ] Proxy reverso com HTTPS e backup do `scout.db`.

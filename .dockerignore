@@ -1,0 +1,38 @@
+# Fora da imagem: segredos, dados, ambiente local e artefatos de desenvolvimento.
+.git
+.gitignore
+.github
+.env
+.env.*
+!.env.example
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Dados e bancos (o scout.db entra por volume, nunca na imagem)
+*.db
+*.sqlite
+*.sqlite3
+data/
+downloaded_files/
+logs/
+scrapers/
+pipelines/
+scripts/
+tests/
+*.csv
+*.json
+*.xlsx
+
+# Scraping/ETL não fazem parte da imagem da API
+load_*.py
+match_ids.py
+main.py
+requirements.txt
+
+README.md
+Dockerfile
+docker-compose.yml
+

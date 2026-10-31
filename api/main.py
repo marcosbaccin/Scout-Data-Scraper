@@ -19,7 +19,7 @@ import sys
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import pandas as pd
 from pydantic import BaseModel, Field
 
@@ -30,25 +30,33 @@ if BASE_DIR not in sys.path:
 
 from analytics_engine import ScoutAnalyticsEngine, RADAR_METRICS_BY_ROLE
 from api.explorer import router as explorer_router
+from core.security import install_security, load_security_settings
 from core.settings import DB_PATH
 from explorer_engine import ExplorerError, get_engine as get_explorer_engine
+
+SECURITY = load_security_settings()
 
 app = FastAPI(
     title="⚽ Scout Data Intelligence API",
     version="2.1",
     description="API RESTful de Scouting Esportivo de Alto Desempenho para Atletas Brasileiros",
+    # Em produção a documentação interativa fica desligada (DOCS_ENABLED=true para reativar).
+    docs_url="/docs" if SECURITY.docs_enabled else None,
+    redoc_url="/redoc" if SECURITY.docs_enabled else None,
+    openapi_url="/openapi.json" if SECURITY.docs_enabled else None,
 )
 
 app.include_router(explorer_router)
 
-# Libera CORS para frontends (Streamlit, React, Vite, Next.js)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Autenticação (API key / Basic Auth), rate limit, headers de segurança e CORS restrito por ALLOWED_ORIGINS.
+install_security(app, SECURITY)
+
+
+@app.get("/health", tags=["Status"], include_in_schema=False)
+def health():
+    """Liveness/readiness para load balancers e Docker HEALTHCHECK (sem autenticação, sem dados sensíveis)."""
+    db_ok = os.path.exists(DB_PATH)
+    return JSONResponse({"status": "ok" if db_ok else "degraded", "database": db_ok}, status_code=200 if db_ok else 503)
 
 engine_analytics = ScoutAnalyticsEngine(db_path=DB_PATH)
 
