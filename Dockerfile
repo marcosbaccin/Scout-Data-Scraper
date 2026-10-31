@@ -8,7 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     APP_ENV=production \
-    DB_PATH=/data/scout.db \
+    DB_PATH=/app/scout.db \
     PORT=8000 \
     WEB_CONCURRENCY=1
 
@@ -24,9 +24,12 @@ COPY core ./core
 COPY frontend ./frontend
 COPY analytics_engine.py explorer_engine.py ./
 
-# Usuário sem privilégios; /data é montado (somente leitura) em tempo de execução.
+# Banco de dados Gold consolidado (~7 MB) para execução self-contained na nuvem
+COPY scout.db ./scout.db
+
+# Usuário sem privilégios; /data suporta montagem de volume externo opcional
 RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin scout \
-    && mkdir -p /data && chown scout /data
+    && mkdir -p /data && chown scout /data && chown scout /app/scout.db
 USER scout
 
 EXPOSE 8000

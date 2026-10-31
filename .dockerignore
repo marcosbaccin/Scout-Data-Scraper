@@ -11,10 +11,12 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 
-# Dados e bancos (o scout.db entra por volume, nunca na imagem)
-*.db
+# Dados e bancos temporários (scout.db entra na imagem para deploy cloud self-contained)
 *.sqlite
 *.sqlite3
+scout_backup*
+*.db-journal
+*.db-wal
 data/
 downloaded_files/
 logs/

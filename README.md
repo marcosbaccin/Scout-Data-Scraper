@@ -1,3 +1,12 @@
+---
+title: Scout Data Intelligence
+emoji: ⚽
+colorFrom: green
+colorTo: blue
+sdk: docker
+app_port: 8000
+---
+
 # ⚽ Scout Data Scraper & Analytics Platform
 
 Plataforma profissional de engenharia de dados e scouting esportivo para extração, unificação, modelagem analítica e visualização de jogadores brasileiros nas **11 principais ligas do futebol mundial**.

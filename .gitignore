@@ -35,8 +35,8 @@ htmlcov/
 *.sqlite3
 *.db-journal
 *.db-wal
-scout.db
-scout_backup_pre_refactor.db
+!scout.db
+scout_backup*
 
 # ==========================================
 # Dumps de Coleta, Dados Brutos & Checkpoints

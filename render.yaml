@@ -1,0 +1,22 @@
+# Blueprint de infraestrutura para deploy 100% gratuito no Render.com
+# Documentação: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: scout-data-intelligence
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: ALLOW_PUBLIC
+        value: "true"
+      - key: TRUST_PROXY
+        value: "true"
+      - key: RATE_LIMIT_PER_MIN
+        value: "200"
+      - key: WEB_CONCURRENCY
+        value: "1"
+
