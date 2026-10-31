@@ -142,3 +142,4 @@ for sd in STATS:
     assert rk_res.status_code == 200, f"Ranking falhou para {sd.key}"
 print(f"  [200 OK] Todas as {len(STATS)}/{len(STATS)} estatísticas verificadas em /analytics/rankings!")
 print("\n>>> SUCESSO TOTAL: Todos os testes E2E passaram sem nenhum erro! <<<")
+
