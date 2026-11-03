@@ -35,7 +35,15 @@ assert len(STATS) == 141, f"Esperava exatamente 141 estatísticas, encontrou {le
 print(f"  [OK] Total geral configurável nas 3 abas (Explorador, Raio-X & Radar, Rankings): {len(STATS)} estatísticas objetivas (100% livre de ratings)!")
 
 print("\n=== 2. TESTES END-TO-END DA API FASTAPI (/explorer/* + /dashboard) ===")
-client = TestClient(app)
+import os
+import base64
+headers = {}
+if os.getenv("BASIC_AUTH_USER"):
+    user = os.getenv("BASIC_AUTH_USER", "scout")
+    pwd = os.getenv("BASIC_AUTH_PASSWORD", "Afif_21|09|2019*")
+    token = base64.b64encode(f"{user}:{pwd}".encode()).decode()
+    headers["Authorization"] = f"Basic {token}"
+client = TestClient(app, headers=headers)
 
 for asset in ["/dashboard", "/static/css/style.css", "/static/js/explorer.js", "/static/js/app.js"]:
     r = client.get(asset)

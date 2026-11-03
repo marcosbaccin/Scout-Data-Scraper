@@ -308,9 +308,9 @@
 
                     <!-- Configurador de Eixos do Radar (Todas as 141 Estatísticas) -->
                     <div class="rx-radar-builder">
-                        <input id="dossier-radar-search" type="search" class="ex-input-sm"
-                               placeholder="Filtrar atributo p/ o Radar..." style="max-width: 195px;">
-                        <select id="dossier-radar-add" class="filter-select" style="flex: 1; min-width: 200px;">
+                        <input id="dossier-radar-search" type="search" class="ex-input-sm rx-radar-search"
+                               placeholder="Filtrar atributo p/ o Radar...">
+                        <select id="dossier-radar-add" class="filter-select rx-radar-add">
                             <option value="">+ Adicionar estatística ao Radar (141 disponíveis)...</option>
                         </select>
                         <button id="dossier-radar-reset" type="button" class="btn-ghost" title="Restaurar os 8 atributos padrão da função tática">
@@ -397,10 +397,9 @@
                 </div>
 
                 <div class="rx-full-filters">
-                    <input id="dossier-stat-search" type="search" class="ex-input-sm"
-                           placeholder="🔎 Filtrar entre as 141 estatísticas (ex: gols, passes longos, dribles, velocidade, defesas, PPM, MOTM)..."
-                           style="flex: 2; min-width: 240px;">
-                    <select id="dossier-cat-filter" class="filter-select" style="flex: 1; min-width: 210px;">
+                    <input id="dossier-stat-search" type="search" class="ex-input-sm rx-stat-search"
+                           placeholder="🔎 Filtrar entre as 141 estatísticas (ex: gols, passes longos, dribles, velocidade, defesas, PPM, MOTM)...">
+                    <select id="dossier-cat-filter" class="filter-select rx-cat-filter">
                         <option value="">Todas as 12 Categorias</option>
                     </select>
                 </div>

@@ -13,9 +13,13 @@ URL = f"http://127.0.0.1:{PORT}/dashboard"
 
 python_exe = sys.executable
 
+import os
+custom_env = {**os.environ, "ALLOW_PUBLIC": "true"}
+
 proc = subprocess.Popen(
     [python_exe, "-m", "uvicorn", "api.main:app", "--host", "127.0.0.1", "--port", str(PORT)],
     cwd=str(ROOT),
+    env=custom_env,
     stdout=subprocess.DEVNULL,
     stderr=subprocess.DEVNULL,
 )
@@ -32,7 +36,13 @@ try:
     errors = []
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        page = browser.new_page(viewport={"width": 1440, "height": 900})
+        user = os.getenv("BASIC_AUTH_USER", "scout")
+        pwd = os.getenv("BASIC_AUTH_PASSWORD", "Afif_21|09|2019*")
+        ctx = browser.new_context(
+            viewport={"width": 1440, "height": 900},
+            http_credentials={"username": user, "password": pwd}
+        )
+        page = ctx.new_page()
         page.on("pageerror", lambda err: errors.append(f"PAGEERROR: {err}"))
         page.on("console", lambda msg: errors.append(f"CONSOLE_ERR: {msg.text}") if msg.type == "error" else None)
 

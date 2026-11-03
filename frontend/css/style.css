@@ -775,36 +775,6 @@ h1, h2, h3, h4, .font-heading {
     opacity: 0.5;
 }
 
-/* Responsive */
-@media (max-width: 1024px) {
-    .dossier-grid {
-        grid-template-columns: 1fr;
-    }
-    .dossier-hero {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 1.5rem;
-    }
-    .dossier-hero-right {
-        align-items: flex-start;
-    }
-}
-
-@media (max-width: 768px) {
-    .navbar {
-        padding: 1rem;
-        flex-direction: column;
-        gap: 1rem;
-    }
-    .nav-tabs {
-        width: 100%;
-        overflow-x: auto;
-    }
-    .main-wrapper {
-        padding: 1.5rem 1rem;
-    }
-}
-
 
 /* ==========================================================================
    EXPLORADOR AVANÇADO DE SCOUTING (143+ ESTATÍSTICAS & DUAL RANGE SLIDERS)
@@ -1933,47 +1903,6 @@ h1, h2, h3, h4, .font-heading {
     display: none;
 }
 
-/* Responsive Drawer on Tablet / Mobile */
-@media (max-width: 1080px) {
-    .ex-layout {
-        grid-template-columns: 1fr;
-    }
-
-    .ex-only-mobile {
-        display: inline-flex;
-    }
-
-    .ex-panel {
-        position: fixed;
-        top: 0;
-        left: 0;
-        bottom: 0;
-        width: min(420px, 92vw);
-        max-height: 100vh;
-        z-index: 250;
-        border-radius: 0;
-        transform: translateX(-105%);
-        transition: transform var(--transition-smooth);
-    }
-
-    .ex-panel.is-open {
-        transform: translateX(0);
-    }
-
-    .ex-panel-foot {
-        padding: 0.8rem 1.1rem;
-        border-top: 1px solid var(--border-subtle);
-        background: var(--bg-surface);
-    }
-
-    .ex-backdrop {
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.65);
-        z-index: 240;
-    }
-}
-
 
 /* ==========================================================================
    RANKINGS & LÍDERES (143+ ESTATÍSTICAS, GRÁFICO & BENCHMARKS POSICIONAIS)
@@ -2350,19 +2279,386 @@ h1, h2, h3, h4, .font-heading {
     color: #fff;
 }
 
-@media (max-width: 960px) {
-    .dossier-grid {
-        grid-template-columns: 1fr;
+/* ==========================================================================
+   SISTEMA DE RESPONSIVIDADE UNIFICADO & FLUID DESIGN
+   Mobile-First / Multi-Breakpoint (360px, 480px, 768px, 1080px, 1440px)
+   ========================================================================== */
+
+/* Universal Overflow Protection & Box Model */
+html, body {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+}
+
+/* Ensure flex/grid children don't overflow with long option strings */
+.filter-select,
+.filter-group,
+.ex-select,
+.rx-Combo,
+.search-box,
+input,
+select,
+button {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.filter-select {
+    text-overflow: ellipsis;
+}
+
+.rx-Combo > div {
+    min-width: 0;
+    max-width: 100%;
+}
+
+/* Responsive Radar Builder & Full Attribute Filters */
+.rx-radar-builder {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+}
+
+.rx-radar-search {
+    flex: 1 1 180px;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.rx-radar-add {
+    flex: 2 1 240px;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.rx-full-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    width: 100%;
+    min-width: 0;
+}
+
+.rx-stat-search {
+    flex: 2 1 260px;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.rx-cat-filter {
+    flex: 1 1 200px;
+    min-width: 0;
+    max-width: 100%;
+}
+
+/* Breakpoint 1: Tablet / Small Desktop (<= 1080px) */
+@media (max-width: 1080px) {
+    /* Explorador: 1-column layout + Off-Canvas Filter Drawer */
+    .ex-layout {
+        grid-template-columns: minmax(0, 1fr);
     }
-    .dossier-hero {
+
+    .ex-only-mobile {
+        display: inline-flex;
+    }
+
+    .ex-panel {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: min(420px, 92vw);
+        max-height: 100vh;
+        z-index: 250;
+        border-radius: 0;
+        transform: translateX(-105%);
+        transition: transform var(--transition-smooth), visibility var(--transition-smooth);
+        visibility: hidden;
+    }
+
+    .ex-panel.is-open {
+        transform: translateX(0);
+        visibility: visible;
+    }
+
+    .ex-panel-foot {
+        padding: 0.8rem 1.1rem;
+        border-top: 1px solid var(--border-subtle);
+        background: var(--bg-surface);
+    }
+
+    .ex-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.65);
+        z-index: 240;
+    }
+
+    /* Raio-X & Radar: Single column on tablet */
+    .dossier-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 1.5rem;
+    }
+
+    .radar-container-card {
+        max-width: 100%;
+    }
+}
+
+/* Breakpoint 2: Mobile & Tablet Portrait (<= 768px) */
+@media (max-width: 768px) {
+    /* iOS Auto-zoom prevention: enforce 16px font-size on all mobile inputs */
+    input[type="text"],
+    input[type="search"],
+    input[type="number"],
+    select,
+    textarea,
+    .ex-input-sm,
+    .filter-select,
+    .ex-select {
+        font-size: 16px !important;
+    }
+
+    /* Container padding adjustments */
+    .main-wrapper {
+        padding: 1rem 0.75rem;
+    }
+
+    .navbar {
+        padding: 0.75rem 1rem;
         flex-direction: column;
-        align-items: flex-start;
+        align-items: stretch;
+        gap: 0.75rem;
+    }
+
+    .brand-container {
+        justify-content: space-between;
+        width: 100%;
+    }
+
+    /* Smooth horizontally scrollable nav tabs */
+    .nav-tabs {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        padding: 0.25rem;
+        gap: 0.35rem;
+    }
+
+    .nav-tabs::-webkit-scrollbar {
+        display: none;
+    }
+
+    .nav-tab-btn {
+        flex-shrink: 0;
+        padding: 0.45rem 0.85rem;
+        font-size: 0.82rem;
+        white-space: nowrap;
+    }
+
+    /* Topbars & Heroes */
+    .ex-topbar {
+        padding: 1rem;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+    }
+
+    .ex-hero-title {
+        font-size: 1.25rem;
+    }
+
+    .ex-hero-sub {
+        font-size: 0.82rem;
+    }
+
+    .filter-card,
+    .radar-container-card,
+    .table-card {
+        padding: 1rem 0.85rem;
+        border-radius: var(--radius-lg);
+    }
+
+    /* Raio-X Dossier Hero */
+    .dossier-hero {
+        padding: 1.25rem 1rem;
+        flex-direction: column;
+        align-items: stretch;
         gap: 1.25rem;
     }
+
+    .dossier-hero-left {
+        flex-direction: row;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .dossier-avatar-large {
+        width: 60px;
+        height: 60px;
+        font-size: 1.5rem;
+        flex-shrink: 0;
+    }
+
     .dossier-hero-right {
         align-items: flex-start;
+        width: 100%;
     }
+
     .dossier-value-box {
         text-align: left;
+    }
+
+    /* Radar Chart Container */
+    .radar-chart-box {
+        height: clamp(260px, 75vw, 380px);
+        margin: 0.5rem 0;
+    }
+
+    /* Dual-range Slider: Enlarged Touch Targets for Thumb (22px) */
+    .ex-dual-range {
+        height: 32px;
+    }
+
+    .ex-dual-range input[type="range"]::-webkit-slider-thumb {
+        width: 22px;
+        height: 22px;
+    }
+
+    .ex-dual-range input[type="range"]::-moz-range-thumb {
+        width: 22px;
+        height: 22px;
+    }
+
+    /* Explorer Athlete Card */
+    .ex-card {
+        padding: 1rem;
+    }
+
+    .ex-card-main {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.85rem;
+    }
+
+    .ex-card-right {
+        align-items: stretch;
+        width: 100%;
+    }
+
+    .ex-card-actions {
+        width: 100%;
+    }
+
+    .ex-card-actions button {
+        flex: 1 1 auto;
+        text-align: center;
+        justify-content: center;
+    }
+
+    /* Rankings Table Responsive Container */
+    .table-card {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .scout-table th,
+    .scout-table td {
+        padding: 0.6rem 0.5rem;
+        font-size: 0.8rem;
+    }
+}
+
+/* Breakpoint 3: Small Mobile Devices (<= 540px) */
+@media (max-width: 540px) {
+    /* Explorador: Results header & sort controls */
+    .ex-results-head {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+        padding: 0.85rem;
+    }
+
+    .ex-results-tools {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+        width: 100%;
+    }
+
+    .ex-tool {
+        flex: 1 1 calc(50% - 0.45rem);
+        min-width: 0;
+    }
+
+    .ex-tool .filter-select {
+        width: 100%;
+    }
+
+    #ex-panel-open {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* Pagination */
+    .ex-pager {
+        flex-direction: column;
+        gap: 0.7rem;
+        text-align: center;
+        padding: 0.75rem;
+    }
+
+    .ex-pager > div {
+        display: flex;
+        gap: 0.4rem;
+        justify-content: center;
+        width: 100%;
+    }
+
+    .ex-pager-btn {
+        flex: 1;
+    }
+
+    /* Card Metrics grid */
+    .ex-card-metrics {
+        grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+        gap: 0.4rem;
+    }
+
+    /* Similar items */
+    .similar-item {
+        flex-wrap: wrap;
+        gap: 0.4rem;
+    }
+
+    /* Rankings Controls Grid */
+    .rk-controls-grid,
+    .rx-controls-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Breakpoint 4: Ultra-compact Screens (<= 380px) */
+@media (max-width: 380px) {
+    .main-wrapper {
+        padding: 0.75rem 0.4rem;
+    }
+
+    .ex-card-metrics {
+        grid-template-columns: 1fr;
+    }
+
+    .ex-tool {
+        flex: 1 1 100%;
+    }
+
+    .brand-title {
+        font-size: 1.05rem;
     }
 }
