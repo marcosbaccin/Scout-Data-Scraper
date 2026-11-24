@@ -630,7 +630,7 @@ function renderDossierRadarSection() {
 
             return `
                 <tr>
-                    <td style="font-weight: 600;" title="${escHtml(st.description)}">
+                    <td class="rx-attr-cell" style="font-weight: 600;" title="${escHtml(st.description)}">
                         ${escHtml(st.label)}
                     </td>
                     <td>${escHtml(rawTxt)}</td>
@@ -898,6 +898,23 @@ function renderSimilarPlayers(similars, container) {
     }).join('');
 }
 
+// Quebra um rótulo em linhas de no máximo `maxChars` caracteres (por palavra).
+function wrapRadarLabel(label, maxChars) {
+    const words = String(label).split(/\s+/);
+    const lines = [];
+    let cur = '';
+    words.forEach(w => {
+        if (cur && (cur + ' ' + w).length > maxChars) {
+            lines.push(cur);
+            cur = w;
+        } else {
+            cur = cur ? cur + ' ' + w : w;
+        }
+    });
+    if (cur) lines.push(cur);
+    return lines;
+}
+
 function renderRadarChart(radarItems, playerName, compItems = null, compName = null) {
     const canvas = document.getElementById('radar-canvas');
     if (!canvas) return;
@@ -969,14 +986,26 @@ function renderRadarChart(radarItems, playerName, compItems = null, compName = n
                     angleLines: { color: 'rgba(255, 255, 255, 0.1)' },
                     pointLabels: {
                         color: '#f8fafc',
-                        font: { size: 10.5, family: "'Inter', sans-serif", weight: 600 },
+                        padding: 6,
+                        // Quebra rótulos longos em várias linhas (evita corte nas bordas do canvas)
+                        callback: function (label) {
+                            const w = (this && this.chart && this.chart.width) || 480;
+                            return wrapRadarLabel(label, w < 340 ? 13 : (w < 480 ? 16 : 22));
+                        },
+                        font: (c) => ({
+                            size: c.chart.width < 340 ? 9 : (c.chart.width < 480 ? 10 : 11),
+                            family: "'Inter', sans-serif",
+                            weight: 600,
+                        }),
                     }
                 }
             },
+            layout: { padding: 4 },
             plugins: {
                 legend: {
                     display: Boolean(compItems && compName),
-                    labels: { color: '#cbd5e1', font: { size: 11 } },
+                    position: 'bottom',
+                    labels: { color: '#cbd5e1', font: { size: 11 }, boxWidth: 14, padding: 10 },
                 },
                 tooltip: {
                     callbacks: {
